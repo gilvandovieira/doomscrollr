@@ -4,59 +4,38 @@ import { closeDatabase } from "./db/client.ts";
 import { logger } from "./lib/logger.ts";
 
 const env = readServerEnv();
-let shuttingDown = false;
 
-logger.info({
-  event: "api_starting",
-  port: env.PORT,
-  appEnv: env.APP_ENV,
-});
+logger.info({ event: "api_starting", port: env.PORT, appEnv: env.APP_ENV });
 
 const server = Deno.serve({ port: env.PORT }, app.fetch);
 
+let shuttingDown = false;
+
 async function shutdown(signal: "SIGTERM" | "SIGINT") {
   if (shuttingDown) {
-    // A second signal while a drain is already in flight: exit now instead of
-    // ignoring it. Otherwise a hung drain leaves a zombie that only SIGKILL can
-    // clear, and concurrent watchers/agents pile those up until the box OOMs.
-    Deno.exit(130);
-  }
-  shuttingDown = true;
-
-  logger.info({ event: "api_shutdown_started", signal });
-
-  // Hard failsafe: never let a stuck server.shutdown()/closeDatabase() keep the
-  // process — and its memory — alive past the drain budget.
-  const forceExit = setTimeout(() => {
     logger.warn({ event: "api_shutdown_forced", signal });
     Deno.exit(1);
-  }, 12_000);
+  }
+  shuttingDown = true;
+  logger.info({ event: "api_shutdown_started", signal });
+
+  const timeoutMs = env.APP_ENV === "development" ? 350 : 10_000;
+  const timeout = new Promise<never>((_, reject) => {
+    setTimeout(() => reject(new Error("shutdown timeout")), timeoutMs);
+  });
 
   try {
     await Promise.race([
-      server.shutdown(),
-      new Promise((resolve) => setTimeout(resolve, 10_000)),
+      Promise.allSettled([server.shutdown(), closeDatabase()]),
+      timeout,
     ]);
+    logger.info({ event: "api_shutdown_complete", signal });
+    Deno.exit(signal === "SIGINT" ? 130 : 0);
   } catch (error) {
-    logger.warn({
-      event: "api_server_shutdown_failed",
-      message: error instanceof Error ? error.message : "unknown",
-    });
+    logger.error({ event: "api_shutdown_failed", signal, error });
+    Deno.exit(1);
   }
-
-  try {
-    await closeDatabase();
-  } catch (error) {
-    logger.warn({
-      event: "api_database_close_failed",
-      message: error instanceof Error ? error.message : "unknown",
-    });
-  }
-
-  clearTimeout(forceExit);
-  logger.info({ event: "api_shutdown_complete", signal });
-  Deno.exit(0);
 }
 
-Deno.addSignalListener("SIGTERM", () => void shutdown("SIGTERM"));
-Deno.addSignalListener("SIGINT", () => void shutdown("SIGINT"));
+Deno.addSignalListener("SIGTERM", () => { shutdown("SIGTERM"); });
+Deno.addSignalListener("SIGINT", () => { shutdown("SIGINT"); });

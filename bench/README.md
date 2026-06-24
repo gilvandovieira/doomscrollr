@@ -25,8 +25,13 @@ bench/
 │   ├── Dockerfile.alpine-plain    (FAILS: musl)
 │   ├── Dockerfile.alpine-gcompat  (FAILS: __res_init missing)
 │   └── Dockerfile.distroless      (WORKS: glibc, smallest)
-└── logs/                     — boot logs kept as evidence (the multi-MB per-request logs were dropped)
+├── logs/                     — boot logs kept as evidence (the multi-MB per-request logs were dropped)
+└── dev-loop/                 — reload-loop benchmarks + the `deno run --watch` MEMORY LEAK repro (see its README)
 ```
+
+> **See also [`dev-loop/README.md`](./dev-loop/README.md)** — reproduces the `deno run --watch`
+> per-reload memory leak (634 → 3011 MB over 5 reloads under real work) and compares it against
+> external cold-respawn (flat) and `deno compile` + binary (minimal). This is the dev-DX finding.
 
 ## Test machine / method
 

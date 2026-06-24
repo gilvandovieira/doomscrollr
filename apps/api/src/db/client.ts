@@ -43,5 +43,5 @@ export async function checkDatabaseReady(timeoutMs = 1500): Promise<boolean> {
 
 export async function closeDatabase(): Promise<void> {
   if (!queryClient) return;
-  await queryClient.end({ timeout: 5 });
+  await queryClient.end({ timeout: 1 });
 }

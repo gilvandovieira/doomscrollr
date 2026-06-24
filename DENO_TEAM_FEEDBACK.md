@@ -1,131 +1,157 @@
-# Deno 2.8 — memory & throughput feedback from a real app
+# Deno 2.8.3: `deno run --watch` RSS grows across reloads under real traffic
 
-**Deno version:** 2.8.3 (stable, x86_64-unknown-linux-gnu)
-**Date:** 2026-06-24
-**App under test:** a normal production API — Hono + Drizzle ORM + postgres.js + Clerk + Zod +
-Pino, all via `npm:` specifiers, in a Deno workspace (`apps/api` + 3 local `packages/*`), about
-70 TypeScript files. (No application code or data is included here — only measurements.)
+## Summary
 
-We like Deno and want to keep using it. But we hit a memory problem in day-to-day work, so we
-measured it carefully. Here is what we found, in plain terms, with numbers you can reproduce.
+On a real Hono + Drizzle + postgres.js API, a single `deno run --watch` process **accumulates
+resident memory on every reload** while the app is serving real traffic: the same process climbed
+**634 MB → 3,011 MB over 5 file-change reloads** (~+475 MB per reload, not reclaimed). A **control**
+that reloads by starting a **fresh process** (external watcher → `deno run`, or `deno compile` +
+binary) stays **flat** under the identical app and workload. From a developer's point of view this
+behaves like a reload leak — RSS grows on every save and is not given back, so a normal editing
+session OOMs the machine.
 
-## Test machine
+We have **not** captured V8 heap snapshots, so we describe this as "retains/accumulates RSS" rather
+than asserting unreachable-memory retention. The behavior is consistent and reproducible; the
+control isolates it to `--watch` **process reuse** rather than the application workload.
+
+## Environment
 
 | | |
 |---|---|
+| Deno | 2.8.3 (stable, x86_64-unknown-linux-gnu) |
+| Also compared | Node 26.1.0, Bun 1.3.14 |
 | CPU | 12th Gen Intel Core i7-12700H — 20 logical cores |
 | RAM | 15 GiB |
 | OS / kernel | CachyOS, Linux 7.0.12 |
-| Container engine | Docker 29.6.0 |
-| Runtimes compared | Deno 2.8.3, Node 26.1.0, Bun 1.3.14 |
+| Container engine | Docker 29.6.0 (local Postgres 16) |
+| App under test | Hono + Drizzle ORM + postgres.js + Clerk + Zod + Pino, all `npm:` specifiers, Deno workspace (`apps/api` + 3 local `packages/*`), ~70 TS files |
 
-Single machine, local Postgres (Docker). All runs back-to-back under the same conditions.
+Single machine, all runs back-to-back under identical conditions. No personal data, credentials,
+hostnames, or file paths are included here.
 
----
+## Main finding: watch reload accumulation
 
-## The short version
+`deno run --watch`, server pinned to 4 cores, with a closed-loop client hitting `/api/feed/recent`
+(a real Postgres query) throughout. `VmRSS` read from `/proc/<pid>/status` after each reload (the
+PID is stable — `--watch` reloads in-process):
 
-1. **`deno run` uses a lot of memory for our app — and it grows under load and does not give it
-   back.** On a 4-core budget it idles at **254 MB** and climbs to **826 MB** under load. On a
-   20-core machine it idles at **641 MB**. The same app on Node idles at ~196 MB, on Bun ~91 MB.
-2. **This hurts day-to-day work.** We run a few dev servers and a few automated agents at once.
-   Each `deno run --watch` server is big, they add up, and the machine runs out of memory — the
-   server process gets killed. It looked like a memory leak; it was not. It was just Deno's
-   per-process size times a handful of processes.
-3. **`deno compile` fixes most of the memory problem** — same app drops from 826 MB to **401 MB**
-   under load, with no code change. So a large part of `deno run`'s memory looks like a *dev/run*
-   cost (transpiling + holding the whole module graph), not a hard limit of the runtime.
-4. **`Deno.serve` is slower than the other runtimes' servers in our test** — about **6k requests
-   per second** vs ~21k (Node) and ~34k (Bun) on the same 4 cores for a trivial endpoint.
-   `deno compile` does **not** change this, so it is a serving/runtime thing, not startup.
+| Reload | 0 | 1 | 2 | 3 | 4 | 5 |
+|---|---:|---:|---:|---:|---:|---:|
+| RSS (MB) | 634 | 878 | 1342 | 1896 | 2520 | 3011 |
 
-Two asks, both about `deno run`: **(a)** can `deno run` keep memory closer to the compiled
-binary? **(b)** can the HTTP server get closer to Node/Bun throughput?
+~+475 MB per reload, monotonic, not reclaimed. Reload latency itself is fine (~670 ms); only memory
+grows. The accumulation is **much more visible under real traffic + live DB connections** than at
+idle — idle-only probes made `--watch` look stable, which is likely why this is easy to miss.
 
----
+## Control: fresh-process reload stays flat
 
-## How we measured (so you can repeat it)
+Same app, same load, same 4-core pin — but each reload is a **new process**:
 
-- **Same app code on every runtime.** For Node and Bun we injected a ~70-line `Deno` global shim
-  (mapping `Deno.serve` / `Deno.env` / `Deno.exit` / `Deno.addSignalListener` / `Deno.resolveDns`
-  onto native APIs). **Zero application changes.** Deno ran the code directly.
-- **Four modes:** `deno run`, `deno compile` (standalone binary), Node 26 (via `@hono/node-server`),
-  Bun 1.3 (via `Bun.serve`).
-- **CPU isolation for fairness:** the server was pinned to cores 0–3 (`taskset`), the load
-  generator to cores 4–15, so they never competed for CPU. (We also took an unpinned reading.)
-- **Memory:** `VmRSS` (resident) and peak `VmHWM` read straight from `/proc/<pid>/status`.
-- **Load:** a closed-loop client. Pure-runtime endpoint `/health` at 100 concurrent for 8 s; real
-  database endpoint `/api/feed/recent` at 50 concurrent for 12 s, after a short warm-up. We report
-  requests/sec and p50/p90/p99 latency.
-- **Validity check:** every run confirmed a live DB connection (`/ready` → `{"database":"ok"}`)
-  before and after load, so nothing was short-circuiting the work.
+| Reload strategy | RSS across reloads | Reload latency |
+|---|---|---:|
+| `deno run --watch` (in-process reuse) | 634 → 3011 MB (grows) | ~670 ms |
+| external watcher → fresh `deno run` | **~631 MB, flat** | ~1.0 s |
+| external watcher → `deno compile` + run binary | **~221 MB, flat** | ~2.2 s (compile-bound) |
 
-No personal data, credentials, hostnames, or file paths are included in this report.
+A fresh process per reload is flat under the identical workload. This strongly suggests the
+accumulation is tied to `--watch` **process reuse** — the previous module graph / isolate not being
+reclaimed on restart — rather than the application code or the workload. (For reference, the
+compiled binary cold-starts in ~30 ms; the 2.2 s above is entirely `deno compile`, not startup. Also
+note: shortening the app's graceful-shutdown timeout makes reloads snappier but does **not** affect
+the accumulation — it's about process reuse, not shutdown timing.)
 
----
+## Reproduction method
 
-## The numbers (4-core budget, same app, same DB)
+```bash
+# (1) the affected loop — watch, in-process reload (RSS grows across reloads)
+cd apps/api
+deno run --watch --allow-net --allow-env --allow-sys=hostname --env-file=../../.env.local src/main.ts
 
-| Mode | Cold start | Idle memory | Memory under load | /health req/s | /health p50 | DB-query req/s | DB-query p50 |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| **Deno** (`deno run`) | 202 ms | 254 MB | **826 MB** | 5,961 | 16.6 ms | 812 | 61 ms |
-| **Deno** (`deno compile`) | 199 ms | 215 MB | **401 MB** | 5,961 | 16.6 ms | 862 | 58 ms |
-| Node 26 (`@hono/node-server`) | 567 ms¹ | 196 MB | 246 MB | 20,824 | 4.6 ms | 1,240 | 40 ms |
-| Bun 1.3 (`Bun.serve`) | 118 ms | 91 MB | 198 MB | 33,698 | 2.8 ms | 884 | 56 ms |
+# (2) control A — external watcher, fresh process each change (flat memory)
+#     (watchexec/entr kill + respawn; we used kill -9 + re-exec)
+watchexec -r -e ts -- deno run --allow-net --allow-env --allow-sys=hostname src/main.ts
 
-For reference, **idle memory with no CPU limit (all 20 cores):** `deno run` **641 MB**,
-`deno compile` 226 MB, Node 206 MB, Bun 100 MB. (`deno run`'s idle memory scales up with the
-number of cores — it was 254 MB on 4 cores, 641 MB on 20.)
+# (3) control B — compile then run the binary (flat, minimal memory)
+deno compile --allow-net --allow-env --allow-sys=hostname --output /tmp/server src/main.ts && /tmp/server
 
-¹ Node's cold start is slow only because we ran TypeScript through `tsx` (a dev transpiler). A
-normal Node deploy ships plain JS and starts fast. Not a fair number against Deno — listed for
-honesty, not as a point against anyone.
+# real-work load (closed-loop, ~12 concurrent) against a DB-backed route, for the whole run
+bun load.ts http://localhost:8000/api/feed/recent 12 16     # tiny fetch-loop client
 
----
+# force a --watch reload without semantic change (append a comment to a file in the graph)
+echo "// reload $(date +%s%N)" >> apps/api/src/lib/og.ts
 
-## What stands out
+# sample RSS after each reload (PID is stable under --watch)
+awk '/VmRSS|VmHWM/{print}' /proc/<pid>/status
+```
 
-- **Memory under load on `deno run` is the worst part: it reaches 826 MB and stays there** after
-  the load stops (the other runtimes also keep some heap, but far less: Node +50 MB, Bun +107 MB,
-  `deno run` +572 MB over idle).
-- **`deno compile` removes most of it** (826 → 401 MB) with no code change. This strongly suggests
-  the extra memory in `deno run` is the cost of transpiling on startup and **holding the whole TS
-  module graph in memory** while running. If `deno run` could release or avoid that the way the
-  compiled binary does, the dev experience would match production.
-- **HTTP throughput:** for a trivial endpoint, `Deno.serve` did ~6k req/s where Node did ~21k and
-  Bun ~34k on the same cores. On a real database query the gap closes a lot (the DB is the limit),
-  but the trivial-endpoint gap is large and `deno compile` does not change it.
+Fairness/validity: server pinned `taskset -c 0-3`, load generator `taskset -c 8-15` (no CPU
+contention); every run verified a live DB (`/ready` → `{"database":"ok"}`) before measuring.
 
-## Why this matters for developers (the DX story)
+> Footnote, in the spirit of honest benchmarking: during one cleanup pass a script ran
+> `docker rm -f $(docker ps -aq --filter name=t)` to remove a throwaway container named `t`.
+> Docker's `name` filter is a *substring* match, and `postgres` contains a `t` — so we briefly,
+> heroically "dropped the prod database" mid-run (hence a few stray `/api/feed/recent` 500s in the
+> logs). It was a local dev container, the data was in a named volume, and `docker compose up -d`
+> restored all 50 rows. No production database was harmed; one engineer's composure was.
 
-The thing that actually bit us: a `deno run --watch` dev server for this app is **0.6–2 GB**.
-Run two of those plus a couple of automated agents that each start one, and a 16 GB laptop runs
-out of memory and the OOM killer takes the server. We spent real time thinking we had a leak in
-our code. We did not — our app's live data is only ~27 MB (that is the jump Node and Bun show
-from an empty server to the full app). The rest is runtime overhead that only `deno run` carries.
+## Raw numbers
 
-## Where this leaves us (the decision the numbers force)
+Watch-reload RSS series (MB): `634 878 1342 1896 2520 3011` over reloads 0–5.
+Fresh-process controls (MB): `deno run` → `631 631 631 …` (flat); `deno compile` binary → `~221`
+(flat). Reload latencies: `--watch` ~670 ms; cold `deno run` ~1.0 s; `deno compile`+binary ~2.2 s
+(of which ~30 ms is binary startup, the rest is `deno compile`). 0 errors except the self-inflicted
+DB-removal window noted above.
 
-This is the practical choice we now face. We would prefer to stay on Deno, but the memory result
-pushes us toward alternatives for production:
+## Why this hurts DX
 
-| Deploy target | Best fit | Idle RSS (no CPU limit) | Code change | Why |
-|---|---|---:|---|---|
-| Container (Fargate / App Runner) | **Deno, `deno compile`** | 226 MB | none | ship a binary; stay on Deno; ~3× less RAM than `deno run` |
-| Lambda (managed runtime) | **Node** | 206 MB | full rewrite | only Node is a *managed* Lambda runtime → dev/prod parity; Deno needs a custom/container runtime |
-| Container, minimum memory | **Bun** | 100 MB | full rewrite | lightest; native TS; but no Lambda-native runtime |
+A `deno run --watch` server for this app starts around **0.6 GB** and then **climbs ~0.5 GB per
+save**. A focused half-hour of editing — plus a couple of automated agents that each spawn their own
+dev server — and a 16 GB laptop starts swapping, then the OOM killer takes a process. We lost real
+time assuming the accumulation was a bug in our code; the control runs suggest it isn't — the
+application-specific increment looks small next to the runtime/`--watch` overhead (Node and Bun add
+only ~27 MB going from an empty server to the full app, which is the closest proxy we have, not a
+true live-set measurement). The per-reload growth under `--watch` is the part that actually hurts.
 
-The takeaway for you: **`deno compile` keeps us on Deno for containers** — that is the path we want.
-The only reason we would leave Deno is a managed Lambda runtime (parity) or absolute minimum memory.
-If `deno run` got close to `deno compile`'s memory, there would be no friction at all in dev either.
+## Secondary observation: `deno run` memory and `Deno.serve` throughput
+
+Separate from the reload issue, two lower-priority data points (same app, 4-core budget):
+
+| Mode | Idle RSS | Under load | `/health` req/s (p50) | DB-route req/s (p50) |
+|---|---:|---:|---|---|
+| `deno run` | 254 MB | 826 MB | 5,961 (16.6 ms) | 812 (61 ms) |
+| `deno compile` | 215 MB | 401 MB | 5,961 (16.6 ms) | 862 (58 ms) |
+| Node 26 (`@hono/node-server`) | 196 MB | 246 MB | 20,824 (4.6 ms) | 1,240 (40 ms) |
+| Bun 1.3 (`Bun.serve`) | 91 MB | 198 MB | 33,698 (2.8 ms) | 884 (56 ms) |
+
+- `deno run` baseline is heavy and **scales with core count** (254 MB on 4 cores → 641 MB on 20).
+  `deno compile` reclaims most of it with no code change, so much of it reads as a *dev/run*
+  transpile-and-retain cost rather than a hard runtime floor.
+- `Deno.serve` trivial-route throughput trailed Node/Bun at equal cores. **Treat this as weak
+  evidence:** Node and Bun use different server implementations and ran via a small `Deno` global
+  shim, so it is not an apples-to-apples runtime comparison. On the real DB route the gap mostly
+  closes (the database dominates).
 
 ## What would help
 
-1. Bring `deno run` memory closer to `deno compile` (don't retain the full transpiled graph, or
-   release it after warmup).
-2. A simple way to **cap or report** what `deno run` holds for the module graph, so we can see it.
-3. If possible, a smaller-by-default footprint when fewer CPUs are available (it scales up with
-   core count today).
-4. Any guidance on closing the `Deno.serve` throughput gap for `npm:`-heavy Hono apps.
+1. **Confirm/fix `--watch` reload accumulation** (primary): fully reclaim the previous module
+   graph / isolate on restart. Even a documented "restart the process every N reloads" escape hatch,
+   or a flag to fork a fresh process per reload, would resolve the DX pain.
+2. A way to **report** what `deno run` / `--watch` retains for the module graph, so developers can
+   see growth themselves.
+3. (Lower priority) bring the `deno run` baseline closer to `deno compile`, and any guidance on the
+   `Deno.serve` throughput gap for `npm:`-heavy Hono apps.
 
-We are happy to share the full repro repo, the shim, and raw logs.
+## Artifacts available
+
+We can share, for a clean repro or reduction:
+
+- exact `deno run --watch` command, external-watcher command, and `deno compile` + run-binary commands (above);
+- the closed-loop load generator and its invocation;
+- the file-change trigger script used to drive reloads;
+- the RSS sampling method and **raw `/proc/<pid>/status` samples** per reload;
+- a dependency-graph summary of the app (`npm:` specifiers, ~70 TS files);
+- the ~70-line `Deno` global shim used only for the Node/Bun comparison.
+
+We can provide a **reduced, self-contained reproduction repo** on request, or share the full repo
+privately with a maintainer — whichever is preferred. For triage, the exact commands above should be
+enough to reproduce the accumulation on any `npm:`-heavy Deno app.
