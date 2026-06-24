@@ -200,6 +200,20 @@ export const reports = pgTable("reports", {
   index("reports_status_idx").on(table.status),
 ]);
 
+export const domainBlocks = pgTable("domain_blocks", {
+  id: uuid("id").primaryKey(),
+  domain: text("domain").notNull(),
+  reason: text("reason"),
+  createdByUserId: uuid("created_by_user_id").notNull().references(() => users.id),
+  createdAt: timestamps.createdAt,
+}, (table) => [
+  uniqueIndex("domain_blocks_domain_unique").on(table.domain),
+  check(
+    "domain_blocks_domain_format",
+    sql`${table.domain} ~ '^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$'`,
+  ),
+]);
+
 export const moderationNotes = pgTable("moderation_notes", {
   id: uuid("id").primaryKey(),
   targetType: reportTargetType("target_type").notNull(),

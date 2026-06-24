@@ -1,8 +1,10 @@
 import { REPORT_REASONS } from "@doomscrollr/shared/constants.ts";
 import type {
+  AdminDomainBlock,
   AdminReportListQuery,
   AdminTag,
   CreateAdminTagInput,
+  CreateDomainBlockInput,
   ModerationAuditEvent,
   Report,
   UserStatus,
@@ -15,6 +17,7 @@ import {
   ClipboardCheck,
   Filter,
   GitMerge,
+  Globe2,
   History,
   Plus,
   Power,
@@ -28,12 +31,16 @@ import {
 import type { FormEvent } from "react";
 import { useState } from "react";
 import { useAuthToken, useIsSignedIn } from "../../app/account.ts";
+import { AdminTabs } from "./admin-nav.tsx";
 import {
   adminAction,
   ApiError,
   bulkReportAction,
+  createAdminDomainBlock,
   createAdminTag,
   createModerationNote,
+  deleteAdminDomainBlock,
+  fetchAdminDomainBlocks,
   fetchAdminReports,
   fetchAdminTags,
   fetchModerationAudit,
@@ -92,7 +99,7 @@ export function AdminReportsPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [bulkNote, setBulkNote] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
-  const [tagError, setTagError] = useState<string | null>(null);
+  const [domainError, setDomainError] = useState<string | null>(null);
 
   const reportsQuery = useQuery({
     queryKey: ["admin-reports", filters],
@@ -106,9 +113,9 @@ export function AdminReportsPage() {
     enabled: signedIn,
     retry: false,
   });
-  const tagsQuery = useQuery({
-    queryKey: ["admin-tags"],
-    queryFn: () => fetchAdminTags(getToken),
+  const domainBlocksQuery = useQuery({
+    queryKey: ["admin-domain-blocks"],
+    queryFn: () => fetchAdminDomainBlocks(getToken),
     enabled: signedIn,
     retry: false,
   });
@@ -188,30 +195,27 @@ export function AdminReportsPage() {
     }
   }
 
-  async function refreshTags() {
-    await Promise.all([
-      queryClient.invalidateQueries({ queryKey: ["admin-tags"] }),
-      queryClient.invalidateQueries({ queryKey: ["tags"] }),
-    ]);
+  async function refreshDomainBlocks() {
+    await queryClient.invalidateQueries({ queryKey: ["admin-domain-blocks"] });
   }
 
-  async function runTagAction(path: string, body?: unknown) {
-    setTagError(null);
+  async function createDomainBlock(input: CreateDomainBlockInput) {
+    setDomainError(null);
     try {
-      await adminAction(path, getToken, body);
-      await refreshTags();
+      await createAdminDomainBlock(input, getToken);
+      await refreshDomainBlocks();
     } catch (err) {
-      setTagError(err instanceof ApiError ? err.message : "Tag action failed.");
+      setDomainError(err instanceof ApiError ? err.message : "Could not block domain.");
     }
   }
 
-  async function createTag(input: CreateAdminTagInput) {
-    setTagError(null);
+  async function deleteDomainBlock(domain: string) {
+    setDomainError(null);
     try {
-      await createAdminTag(input, getToken);
-      await refreshTags();
+      await deleteAdminDomainBlock(domain, getToken);
+      await refreshDomainBlocks();
     } catch (err) {
-      setTagError(err instanceof ApiError ? err.message : "Could not create tag.");
+      setDomainError(err instanceof ApiError ? err.message : "Could not unblock domain.");
     }
   }
 
@@ -229,34 +233,42 @@ export function AdminReportsPage() {
     });
   }
 
-  if (!signedIn) return <Shell message="Sign in as an admin to view reports." />;
-  if (reportsQuery.isPending || tagsQuery.isPending) return <Shell message="Loading admin." />;
-  if (reportsQuery.isError || tagsQuery.isError) {
-    const error = reportsQuery.error ?? tagsQuery.error;
+  if (!signedIn) {
+    return (
+      <Shell message="Sign in with an admin account. The server checks admin role before every moderation action." />
+    );
+  }
+  if (reportsQuery.isPending || domainBlocksQuery.isPending) {
+    return <Shell message="Loading the moderation queue and policy tools." />;
+  }
+  if (reportsQuery.isError || domainBlocksQuery.isError) {
+    const error = reportsQuery.error ?? domainBlocksQuery.error;
     const message = error instanceof ApiError && error.status === 403
-      ? "Admin access required."
-      : "Could not load admin data.";
+      ? "Admin access required. This console is gated by server-verified role."
+      : "Could not load admin data. Reports, domain policy, and audit history stay unavailable until the read succeeds.";
     return <Shell message={message} />;
   }
 
   const reports = reportsQuery.data;
-  const tags = tagsQuery.data;
+  const domainBlocks = domainBlocksQuery.data;
   const visibleSelectedCount = reports.filter((report) => selectedIds.has(report.id)).length;
   const openCount = reports.filter((report) => report.status === "open").length;
   const actionedCount = reports.filter((report) => report.status === "actioned").length;
   const userCaseCount = reports.filter((report) => report.targetType === "user").length;
-  const activeTagCount = tags.filter((tag) => tag.status === "active").length;
   const auditEvents = auditQuery.data ?? [];
 
   return (
     <section className="admin-workbench">
+      <AdminTabs active="moderation" />
+
       <header className="admin-workbench__masthead">
         <div className="admin-workbench__identity">
           <p className="meta-label">Moderator console</p>
           <h1 className="mobile-title admin-workbench__title">Admin docket</h1>
           <p className="admin-workbench__summary">
-            Work the visible report queue, leave target notes, and keep restore decisions easy to
-            trace.
+            Keep the SFW WhatsApp loop safe without turning moderation into a separate product.
+            Reports should end in a clear content decision, a user decision, or a documented
+            dismissal.
           </p>
         </div>
         <dl className="admin-case-tape" aria-label="Visible queue summary">
@@ -279,6 +291,27 @@ export function AdminReportsPage() {
         </dl>
       </header>
 
+      <section className="admin-policy-brief" aria-label="Moderation policy brief">
+        <p>
+          <strong>SFW-only means remove, not gate.</strong>{" "}
+          Confirmed unsafe, spam, harassment, nudity, hate, or suggestive-beyond-policy content
+          should be removed. Removed posts fall back to the unavailable page and a safe preview
+          instead of leaking the original share card.
+        </p>
+        <div className="admin-policy-brief__rules">
+          <span>
+            <strong>Dismiss</strong> when no content or account change is needed.
+          </span>
+          <span>
+            <strong>Mark actioned</strong> after removal, restore, note, status, or trust work.
+          </span>
+          <span>
+            <strong>Stay proportionate</strong>: filters, notes, audit, and bulk tools are enough
+            until real volume proves otherwise.
+          </span>
+        </div>
+      </section>
+
       <div className="admin-workbench__main">
         <section className="hard-panel admin-queue" aria-labelledby="admin-reports-title">
           <div className="admin-panel-heading">
@@ -287,7 +320,10 @@ export function AdminReportsPage() {
               <h2 id="admin-reports-title" className="admin-section-title">
                 Review queue
               </h2>
-              <p className="admin-panel-copy">{formatFilterSummary(filters)}</p>
+              <p className="admin-panel-copy">
+                {formatFilterSummary(filters)}{" "}
+                Targets are public codes or usernames, not internal database ids.
+              </p>
             </div>
             <span className="admin-count-chip">
               {reports.length} {reports.length === 1 ? "case" : "cases"}
@@ -304,6 +340,7 @@ export function AdminReportsPage() {
               <select
                 className="field-control"
                 value={filters.status}
+                aria-label="Filter reports by status"
                 onChange={(event) =>
                   updateFilter("status", event.currentTarget.value as ReportFilters["status"])}
               >
@@ -317,6 +354,7 @@ export function AdminReportsPage() {
               <select
                 className="field-control"
                 value={filters.targetType}
+                aria-label="Filter reports by target type"
                 onChange={(event) =>
                   updateFilter(
                     "targetType",
@@ -333,6 +371,7 @@ export function AdminReportsPage() {
               <select
                 className="field-control"
                 value={filters.reason}
+                aria-label="Filter reports by reason"
                 onChange={(event) =>
                   updateFilter("reason", event.currentTarget.value as ReportFilters["reason"])}
               >
@@ -353,7 +392,8 @@ export function AdminReportsPage() {
                   {visibleSelectedCount} selected for batch review
                 </p>
                 <p className="admin-bulk-bar__hint">
-                  Add one note before resolving every selected visible case.
+                  Bulk actions change report status and can attach one shared note. Remove or
+                  restore the target first when the content itself needs to change.
                 </p>
                 <textarea
                   className="field-control admin-bulk-bar__note"
@@ -392,7 +432,9 @@ export function AdminReportsPage() {
               <div className="admin-empty">
                 <ShieldCheck size={22} aria-hidden="true" />
                 <p>No reports match these filters.</p>
-                <span>Try widening the status, target, or reason filter.</span>
+                <span>
+                  No safety work is visible here. Widen the status, target, or reason filter.
+                </span>
               </div>
             )
             : (
@@ -420,185 +462,121 @@ export function AdminReportsPage() {
         />
       </div>
 
-      <AdminTagsPanel
-        tags={tags}
-        activeCount={activeTagCount}
-        error={tagError}
-        onCreate={createTag}
-        onAction={runTagAction}
+      <AdminDomainBlocksPanel
+        blocks={domainBlocks}
+        error={domainError}
+        onCreate={createDomainBlock}
+        onDelete={deleteDomainBlock}
       />
     </section>
   );
 }
 
-function AdminTagsPanel({
-  tags,
-  activeCount,
+function AdminDomainBlocksPanel({
+  blocks,
   error,
   onCreate,
-  onAction,
+  onDelete,
 }: {
-  tags: AdminTag[];
-  activeCount: number;
+  blocks: AdminDomainBlock[];
   error: string | null;
-  onCreate: (input: CreateAdminTagInput) => Promise<void>;
-  onAction: (path: string, body?: unknown) => Promise<void>;
+  onCreate: (input: CreateDomainBlockInput) => Promise<void>;
+  onDelete: (domain: string) => Promise<void>;
 }) {
-  const [form, setForm] = useState<CreateAdminTagInput>({
-    slug: "",
-    displayName: "",
-    description: null,
-  });
-  const [aliasDrafts, setAliasDrafts] = useState<Record<string, string>>({});
-  const [mergeDrafts, setMergeDrafts] = useState<Record<string, string>>({});
+  const [domain, setDomain] = useState("");
+  const [reason, setReason] = useState("");
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    await onCreate({
-      slug: form.slug.trim().toLowerCase(),
-      displayName: form.displayName.trim(),
-      description: form.description?.trim() || null,
-    });
-    setForm({ slug: "", displayName: "", description: null });
-  }
-
-  async function addAlias(tag: AdminTag) {
-    const aliasSlug = aliasDrafts[tag.slug]?.trim().toLowerCase();
-    if (!aliasSlug) return;
-    await onAction(`tags/${tag.slug}/aliases`, { aliasSlug });
-    setAliasDrafts((current) => ({ ...current, [tag.slug]: "" }));
-  }
-
-  async function mergeInto(tag: AdminTag) {
-    const targetSlug = mergeDrafts[tag.slug]?.trim().toLowerCase();
-    if (!targetSlug) return;
-    await onAction(`tags/${tag.slug}/merge`, { targetSlug });
-    setMergeDrafts((current) => ({ ...current, [tag.slug]: "" }));
+    const trimmedDomain = domain.trim().toLowerCase();
+    if (!trimmedDomain) return;
+    await onCreate({ domain: trimmedDomain, reason: reason.trim() || null });
+    setDomain("");
+    setReason("");
   }
 
   return (
-    <section className="hard-panel admin-tags" aria-labelledby="admin-tags-title">
+    <section
+      className="hard-panel admin-domain-blocks"
+      aria-labelledby="admin-domain-blocks-title"
+    >
       <div className="admin-panel-heading">
         <div>
-          <p className="meta-label">Curated tags</p>
-          <h2 id="admin-tags-title" className="admin-section-title">Tag controls</h2>
+          <p className="meta-label">Blocked domains</p>
+          <h2 id="admin-domain-blocks-title" className="admin-section-title">
+            Link policy
+          </h2>
           <p className="admin-panel-copy">
-            Canonicalize meme labels before they fragment the feed.
+            Block spammy or unsafe source domains from new external-image and YouTube posts.
+            Existing canonical posts keep their normal moderation path.
           </p>
         </div>
         <span className="admin-count-chip">
-          <Tags size={14} aria-hidden="true" />
-          {activeCount}/{tags.length} active
+          <Globe2 size={14} aria-hidden="true" />
+          {blocks.length} blocked
         </span>
       </div>
 
-      <form onSubmit={submit} className="admin-tag-form">
+      <form onSubmit={submit} className="admin-domain-form">
         <label className="admin-filter">
-          <span>Slug</span>
+          <span>Domain</span>
           <input
-            value={form.slug}
-            onChange={(event) => setForm((current) => ({ ...current, slug: event.target.value }))}
-            placeholder="wholesome-chaos"
+            value={domain}
+            onChange={(event) => setDomain(event.currentTarget.value)}
+            placeholder="example.com"
+            aria-label="Domain to block"
             className="field-control admin-mono-field"
             required
           />
         </label>
         <label className="admin-filter">
-          <span>Display name</span>
+          <span>Reason</span>
           <input
-            value={form.displayName}
-            onChange={(event) =>
-              setForm((current) => ({ ...current, displayName: event.target.value }))}
-            placeholder="Wholesome chaos"
-            className="field-control"
-            required
-          />
-        </label>
-        <label className="admin-filter">
-          <span>Description</span>
-          <input
-            value={form.description ?? ""}
-            onChange={(event) =>
-              setForm((current) => ({ ...current, description: event.target.value }))}
-            placeholder="Short curator note"
+            value={reason}
+            onChange={(event) => setReason(event.currentTarget.value)}
+            placeholder="Spam source"
+            aria-label="Reason for blocking domain"
             className="field-control"
           />
         </label>
         <button type="submit" className="tool-button bg-signal text-pitch">
           <Plus size={16} aria-hidden="true" />
-          Create tag
+          Block domain
         </button>
       </form>
 
       {error && <p className="admin-error">{error}</p>}
 
-      <div className="admin-tag-grid">
-        {tags.map((tag) => (
-          <article key={tag.slug} className={`admin-tag-row admin-tag-row--${tag.status}`}>
-            <div className="admin-tag-row__head">
-              <div>
-                <p className="admin-tag-row__slug">#{tag.slug}</p>
-                <p className="admin-tag-row__name">{tag.displayName}</p>
-                <div className="admin-tag-row__meta">
-                  <span>{tag.status}</span>
-                  <span>{tag.postCount} {tag.postCount === 1 ? "post" : "posts"}</span>
-                </div>
-                {tag.aliases.length > 0 && (
-                  <p className="admin-tag-row__aliases">
-                    aliases: {tag.aliases.map((alias) => `#${alias}`).join(", ")}
+      {blocks.length === 0
+        ? (
+          <p className="admin-empty admin-empty--inline">
+            No domains are blocked. New media links still use URL validation and provider checks.
+          </p>
+        )
+        : (
+          <div className="admin-domain-list">
+            {blocks.map((block) => (
+              <article key={block.id} className="admin-domain-row">
+                <div>
+                  <p className="admin-domain-row__domain">{block.domain}</p>
+                  <p className="admin-domain-row__meta">
+                    {block.reason || "No reason recorded."} Added by @{block.createdBy.username}
+                    {" "}
+                    {formatDate(block.createdAt)}
                   </p>
-                )}
-              </div>
-              <button
-                type="button"
-                className="tool-button"
-                onClick={() =>
-                  onAction(`tags/${tag.slug}/${tag.status === "active" ? "disable" : "enable"}`)}
-              >
-                <Power size={16} aria-hidden="true" />
-                {tag.status === "active" ? "Disable" : "Enable"}
-              </button>
-            </div>
-
-            <div className="admin-tag-row__tools">
-              <input
-                value={aliasDrafts[tag.slug] ?? ""}
-                onChange={(event) =>
-                  setAliasDrafts((current) => ({ ...current, [tag.slug]: event.target.value }))}
-                placeholder="alias slug"
-                aria-label={`Alias slug for ${tag.displayName}`}
-                className="field-control admin-mono-field"
-              />
-              <button
-                type="button"
-                className="tool-button"
-                onClick={() =>
-                  addAlias(tag)}
-              >
-                <Plus size={16} aria-hidden="true" />
-                Add alias
-              </button>
-              <input
-                value={mergeDrafts[tag.slug] ?? ""}
-                onChange={(event) =>
-                  setMergeDrafts((current) => ({ ...current, [tag.slug]: event.target.value }))}
-                placeholder="merge into slug"
-                aria-label={`Merge ${tag.displayName} into tag slug`}
-                className="field-control admin-mono-field"
-              />
-              <button
-                type="button"
-                className="tool-button"
-                onClick={() =>
-                  mergeInto(tag)}
-              >
-                <GitMerge size={16} aria-hidden="true" />
-                Merge
-              </button>
-            </div>
-          </article>
-        ))}
-      </div>
+                </div>
+                <button
+                  type="button"
+                  className="tool-button admin-danger-button"
+                  onClick={() => onDelete(block.domain)}
+                >
+                  <Trash2 size={16} aria-hidden="true" />
+                  Unblock
+                </button>
+              </article>
+            ))}
+          </div>
+        )}
     </section>
   );
 }
@@ -653,9 +631,13 @@ function ReportRow({
               {report.status}
             </span>
             <span className="admin-reason-pill">{humanReason(report.reason)}</span>
+            <span className={reviewPriorityChipClass(report.reviewPriority)}>
+              P{report.reviewPriority} {reviewPriorityLabel(report.reviewPriority)}
+            </span>
           </div>
           <p className="meta-label">
-            Reported by @{report.reporter.username} at {formatDate(report.createdAt)}
+            Reported by @{report.reporter.username} ({report.reporterTrustLevel}) at{" "}
+            {formatDate(report.createdAt)}
           </p>
         </div>
 
@@ -695,6 +677,10 @@ function ReportRow({
 
         {report.targetType === "user" && (
           <div className="admin-user-status" aria-label={`User controls for ${code}`}>
+            <p className="admin-user-status__copy">
+              Status changes affect whether this account can keep writing. Trust level is internal
+              for limits, report weight, and review priority; it is not public karma.
+            </p>
             <div className="admin-user-status__row">
               <span>
                 Account status: <strong>{report.targetUserStatus ?? "unknown"}</strong>
@@ -828,8 +814,8 @@ function AuditPanel({
           <h2 id="admin-audit-title" className="admin-section-title">Audit log</h2>
           <p className="admin-panel-copy">
             {events.length === 0
-              ? "Latest actions will appear here."
-              : `${events.length} recent actions`}
+              ? "Notes, removals, restores, report outcomes, and user changes will appear here."
+              : `${events.length} recent actions across notes, removals, restores, reports, and users.`}
           </p>
         </div>
         <History size={18} aria-hidden="true" />
@@ -875,6 +861,19 @@ function formatFilterSummary(filters: ReportFilters): string {
   const target = filters.targetType === "all" ? "all targets" : `${filters.targetType} targets`;
   const reason = filters.reason === "all" ? "all reasons" : humanReason(filters.reason);
   return `Showing ${status} across ${target} for ${reason}.`;
+}
+
+function reviewPriorityLabel(priority: number): string {
+  if (priority >= 50) return "staff";
+  if (priority >= 40) return "trusted";
+  if (priority <= 10) return "low";
+  return "standard";
+}
+
+function reviewPriorityChipClass(priority: number): string {
+  if (priority >= 40) return "admin-priority-chip admin-priority-chip--high";
+  if (priority <= 10) return "admin-priority-chip admin-priority-chip--low";
+  return "admin-priority-chip";
 }
 
 function trustLevelButtonClass(trustLevel: UserTrustLevel): string {

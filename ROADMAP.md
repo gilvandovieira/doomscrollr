@@ -406,8 +406,9 @@ remaining V3 demand gates stay open._
   - _tag aliases/merges already shipped in v2; further discovery work should be demand-driven._
 - [ ] `V3-019` Choose communities or friend circles only after user behavior clarifies the need.
 - [ ] `V3-020` Expand moderation proportionally:
-  - blocked tags/domains
-  - trusted-user review priority _(trust levels exist; priority behavior is not built yet.)_
+  - blocked tags/domains _(tag status gates creation; admin domain blocklist now rejects new media
+    links.)_
+  - trusted-user review priority _(report queue now weights reporter trust level.)_
   - content reclassification
   - deeper audit/restore flows _(basic audit/restore history shipped in v2.)_
 - [ ] `V3-021` Add monetization only after retention and moderation are proven.

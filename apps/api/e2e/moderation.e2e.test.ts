@@ -3,6 +3,7 @@
 // the authorization boundary around /api/admin.
 
 import type {
+  AdminDomainBlock,
   AdminTag,
   Comment,
   FeedPost,
@@ -300,6 +301,59 @@ e2eTest("admin can create, disable, alias, and merge tags", async () => {
   );
 });
 
+e2eTest("admin can block domains and post creation rejects matching media links", async () => {
+  const block = await api<{ ok: boolean }>("/api/admin/moderation/domain-blocks", {
+    asUser: USERS.admin.clerkId,
+    body: { domain: "youtube.com", reason: "e2e unsafe source" },
+  });
+  assertStatus(block, 201);
+
+  try {
+    const list = await api<{ items: AdminDomainBlock[] }>("/api/admin/moderation/domain-blocks", {
+      asUser: USERS.admin.clerkId,
+    });
+    assertStatus(list, 200);
+    assert(
+      list.json.items.some((item) =>
+        item.domain === "youtube.com" && item.reason === "e2e unsafe source"
+      ),
+      "blocked domain should be visible in the admin policy list",
+    );
+
+    const duplicate = await api<{ ok: boolean }>("/api/admin/moderation/domain-blocks", {
+      asUser: USERS.admin.clerkId,
+      body: { domain: "https://youtube.com/watch?v=dQw4w9WgXcQ" },
+    });
+    assertStatus(duplicate, 409);
+
+    const blocked = await api("/api/posts", {
+      asUser: USERS.maya.clerkId,
+      body: {
+        postKind: "youtube",
+        youtubeUrl: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+        tags: [],
+      },
+    });
+    assertStatus(blocked, 400);
+    assertIncludes(blocked.text, "youtube.com");
+  } finally {
+    const deleted = await api("/api/admin/moderation/domain-blocks/youtube.com", {
+      method: "DELETE",
+      asUser: USERS.admin.clerkId,
+    });
+    if (deleted.status !== 204 && deleted.status !== 404) assertStatus(deleted, 204);
+  }
+
+  const after = await api<{ items: AdminDomainBlock[] }>("/api/admin/moderation/domain-blocks", {
+    asUser: USERS.admin.clerkId,
+  });
+  assertStatus(after, 200);
+  assert(
+    after.json.items.every((item) => item.domain !== "youtube.com"),
+    "deleted domain should leave the admin policy list",
+  );
+});
+
 e2eTest("a report enters the admin queue and can be dismissed", async () => {
   // Snapshot the queue first so we can isolate exactly the report we file, even
   // though other tests also file reports against the shared database.
@@ -430,6 +484,81 @@ e2eTest("admin can change internal trust levels and admin trust controls access"
 
   const demotedAccess = await api("/api/admin/reports", { asUser: USERS.ana.clerkId });
   assertStatus(demotedAccess, 403);
+});
+
+e2eTest("trusted reporters receive higher report queue priority", async () => {
+  const before = await api<{ items: Report[] }>("/api/admin/reports?status=all", {
+    asUser: USERS.admin.clerkId,
+  });
+  assertStatus(before, 200);
+  const beforeIds = new Set(before.json.items.map((report) => report.id));
+
+  const trusted = await api<{ ok: boolean }>(
+    `/api/admin/users/${USERS.ana.username}/trust-level`,
+    {
+      asUser: USERS.admin.clerkId,
+      body: { trustLevel: "trusted", reason: "e2e report priority" },
+    },
+  );
+  assertStatus(trusted, 200);
+
+  try {
+    const trustedDetails = "trusted reporter priority e2e";
+    const normalDetails = "normal reporter priority e2e";
+
+    const trustedReport = await api<{ ok: boolean }>("/api/reports", {
+      asUser: USERS.ana.clerkId,
+      body: {
+        targetType: "post",
+        targetCode: POSTS.fridayText.code,
+        reason: "spam",
+        details: trustedDetails,
+      },
+    });
+    assertStatus(trustedReport, 201);
+
+    const normalReport = await api<{ ok: boolean }>("/api/reports", {
+      asUser: USERS.maya.clerkId,
+      body: {
+        targetType: "post",
+        targetCode: POSTS.cacheImage.code,
+        reason: "spam",
+        details: normalDetails,
+      },
+    });
+    assertStatus(normalReport, 201);
+
+    const queue = await api<{ items: Report[] }>("/api/admin/reports", {
+      asUser: USERS.admin.clerkId,
+    });
+    assertStatus(queue, 200);
+
+    const newReports = queue.json.items.filter((report) => !beforeIds.has(report.id));
+    const trustedItem = newReports.find((report) => report.details === trustedDetails);
+    const normalItem = newReports.find((report) => report.details === normalDetails);
+    assert(trustedItem !== undefined, "trusted reporter's report should be visible");
+    assert(normalItem !== undefined, "normal reporter's report should be visible");
+    assertEquals(trustedItem.reporterTrustLevel, "trusted");
+    assertEquals(trustedItem.reviewPriority, 40);
+    assertEquals(normalItem.reporterTrustLevel, "normal");
+    assertEquals(normalItem.reviewPriority, 20);
+
+    const trustedIndex = queue.json.items.findIndex((report) => report.id === trustedItem.id);
+    const normalIndex = queue.json.items.findIndex((report) => report.id === normalItem.id);
+    assert(
+      trustedIndex !== -1 && normalIndex !== -1 && trustedIndex < normalIndex,
+      "trusted reporter's older report should sort ahead of the normal reporter's newer report",
+    );
+  } finally {
+    const restored = await api<{ ok: boolean }>(
+      `/api/admin/users/${USERS.ana.username}/trust-level`,
+      {
+        asUser: USERS.admin.clerkId,
+        body: { trustLevel: "normal", reason: "e2e restore report priority" },
+      },
+    );
+    assertStatus(restored, 200);
+  }
 });
 
 e2eTest("admin can filter reports, bulk resolve them, and leave moderation notes", async () => {

@@ -2,10 +2,12 @@ import type { Context } from "hono";
 import {
   AdminReportListQuerySchema,
   BulkReportActionSchema,
+  CreateDomainBlockSchema,
   CreateModerationNoteSchema,
   SetUserModerationStatusSchema,
   SetUserTrustLevelSchema,
 } from "@doomscrollr/shared/schemas/report.schema.ts";
+import { normalizeDomain } from "@doomscrollr/shared/lib/domain.ts";
 import {
   CreateAdminTagSchema,
   CreateTagAliasSchema,
@@ -22,6 +24,11 @@ import {
   restoreCommentByCode,
 } from "../repositories/comments.repository.ts";
 import { createNotification } from "../repositories/notifications.repository.ts";
+import {
+  createDomainBlock,
+  deleteDomainBlock,
+  listDomainBlocks,
+} from "../repositories/domain-blocks.repository.ts";
 import {
   createModerationNote,
   listModerationAuditEvents,
@@ -83,6 +90,26 @@ adminRoutes.get("/moderation/audit", async (c) => {
   const rawLimit = Number(c.req.query("limit") ?? 30);
   const limit = Number.isFinite(rawLimit) ? rawLimit : 30;
   return c.json({ items: await listModerationAuditEvents(limit) });
+});
+
+adminRoutes.get("/moderation/domain-blocks", async (c) => {
+  return c.json({ items: await listDomainBlocks() });
+});
+
+adminRoutes.post("/moderation/domain-blocks", async (c) => {
+  const admin = getAuthUser(c);
+  const input = parseOrThrow(CreateDomainBlockSchema, await readJsonBody(c));
+  const ok = await createDomainBlock({ ...input, actorUserId: admin.id });
+  if (!ok) throw conflict("DOMAIN_BLOCK_EXISTS", "That domain is already blocked.");
+  return c.json({ ok: true }, 201);
+});
+
+adminRoutes.delete("/moderation/domain-blocks/:domain", async (c) => {
+  const domain = normalizeDomain(c.req.param("domain"));
+  if (!domain) throw badRequest("Enter a valid blocked domain.");
+  const ok = await deleteDomainBlock(domain);
+  if (!ok) throw notFound("Domain block not found.");
+  return c.body(null, 204);
 });
 
 adminRoutes.get("/moderation/notes", async (c) => {

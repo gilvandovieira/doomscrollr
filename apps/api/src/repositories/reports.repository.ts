@@ -70,6 +70,8 @@ export async function createReport(input: {
 type AdminReportRow = {
   id: string;
   reporter: Report["reporter"];
+  reporterTrustLevel: UserTrustLevel;
+  reviewPriority: number;
   targetType: ReportTargetType;
   targetId: string;
   targetCode: string | null;
@@ -91,6 +93,8 @@ function mapReportRows(rows: AdminReportRow[], notesByTarget: Map<string, Report
     return {
       id: row.id,
       reporter: row.reporter,
+      reporterTrustLevel: row.reporterTrustLevel,
+      reviewPriority: row.reviewPriority,
       targetType: row.targetType,
       targetCode: target.targetCode,
       targetUserStatus: row.targetUserStatus,
@@ -107,6 +111,14 @@ function mapReportRows(rows: AdminReportRow[], notesByTarget: Map<string, Report
 async function reportRowsWithFilters(filters: SQL[]): Promise<AdminReportRow[]> {
   const reporter = alias(users, "reporter");
   const targetUser = alias(users, "target_user");
+  const reviewPriority = sql<number>`CASE
+    WHEN ${reporter.trustLevel} = 'admin' THEN 60
+    WHEN ${reporter.trustLevel} = 'moderator' THEN 50
+    WHEN ${reporter.trustLevel} = 'trusted' THEN 40
+    WHEN ${reporter.trustLevel} = 'normal' THEN 20
+    WHEN ${reporter.trustLevel} = 'new' THEN 10
+    ELSE 0
+  END`;
 
   return await requireDb()
     .select({
@@ -116,6 +128,8 @@ async function reportRowsWithFilters(filters: SQL[]): Promise<AdminReportRow[]> 
         displayName: reporter.displayName,
         avatarUrl: reporter.avatarUrl,
       },
+      reporterTrustLevel: reporter.trustLevel,
+      reviewPriority,
       targetType: reports.targetType,
       targetId: reports.targetId,
       targetCode: sql<
@@ -134,7 +148,7 @@ async function reportRowsWithFilters(filters: SQL[]): Promise<AdminReportRow[]> 
     .leftJoin(comments, and(eq(reports.targetType, "comment"), eq(comments.id, reports.targetId)))
     .leftJoin(targetUser, and(eq(reports.targetType, "user"), eq(targetUser.id, reports.targetId)))
     .where(filters.length > 0 ? and(...filters) : undefined)
-    .orderBy(desc(reports.createdAt));
+    .orderBy(desc(reviewPriority), desc(reports.createdAt));
 }
 
 // Admin report queue (spec §14.1, §20.4). targetCode resolves to the public

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { REPORT_REASONS } from "../constants.ts";
+import { normalizeDomain } from "../lib/domain.ts";
 import { AuthorSchema, UserStatusSchema, UserTrustLevelSchema } from "./user.schema.ts";
 
 export const ReportReasonSchema = z.enum(REPORT_REASONS);
@@ -67,6 +68,29 @@ export const SetUserTrustLevelSchema = z
   })
   .strict();
 
+const DomainNameSchema = z.string().transform((value, ctx) => {
+  const domain = normalizeDomain(value);
+  if (!domain) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Enter a valid domain, without wildcards or paths.",
+    });
+    return z.NEVER;
+  }
+  return domain;
+});
+
+const DomainBlockReasonSchema = z.string().trim().max(160).optional().transform((value) =>
+  value && value.length > 0 ? value : null
+);
+
+export const CreateDomainBlockSchema = z
+  .object({
+    domain: DomainNameSchema,
+    reason: DomainBlockReasonSchema,
+  })
+  .strict();
+
 export const ModerationNoteSchema = z
   .object({
     id: z.string().min(1),
@@ -92,11 +116,23 @@ export const ModerationAuditEventSchema = z
   })
   .strict();
 
+export const AdminDomainBlockSchema = z
+  .object({
+    id: z.string().min(1),
+    domain: z.string().min(1),
+    reason: z.string().nullable(),
+    createdBy: AuthorSchema,
+    createdAt: z.string().datetime(),
+  })
+  .strict();
+
 // Admin-facing report view (spec §14, §20.4). Exposed only on admin routes.
 export const ReportSchema = z
   .object({
     id: z.string().min(1),
     reporter: AuthorSchema,
+    reporterTrustLevel: UserTrustLevelSchema,
+    reviewPriority: z.number().int().min(0),
     targetType: ReportTargetTypeSchema,
     targetCode: z.string().min(1),
     targetUserStatus: UserStatusSchema.nullable(),
@@ -111,6 +147,10 @@ export const ReportSchema = z
 
 export const AdminReportListResponseSchema = z
   .object({ items: z.array(ReportSchema) })
+  .strict();
+
+export const AdminDomainBlockListResponseSchema = z
+  .object({ items: z.array(AdminDomainBlockSchema) })
   .strict();
 
 export const ModerationAuditListResponseSchema = z

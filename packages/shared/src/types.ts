@@ -25,8 +25,11 @@ import type {
 } from "./schemas/post.schema.ts";
 import type { ReactionResultSchema, SetReactionSchema } from "./schemas/reaction.schema.ts";
 import type {
+  AdminDomainBlockListResponseSchema,
+  AdminDomainBlockSchema,
   AdminReportListQuerySchema,
   BulkReportActionSchema,
+  CreateDomainBlockSchema,
   CreateModerationNoteSchema,
   CreateReportSchema,
   ModerationAuditActionSchema,
@@ -100,6 +103,9 @@ export type ReportReason = z.infer<typeof ReportReasonSchema>;
 export type Report = z.infer<typeof ReportSchema>;
 export type CreateReportInput = z.infer<typeof CreateReportSchema>;
 export type AdminReportListQuery = z.infer<typeof AdminReportListQuerySchema>;
+export type AdminDomainBlock = z.infer<typeof AdminDomainBlockSchema>;
+export type AdminDomainBlockListResponse = z.infer<typeof AdminDomainBlockListResponseSchema>;
+export type CreateDomainBlockInput = z.infer<typeof CreateDomainBlockSchema>;
 export type CreateModerationNoteInput = z.infer<typeof CreateModerationNoteSchema>;
 export type BulkReportActionInput = z.infer<typeof BulkReportActionSchema>;
 export type SetUserModerationStatusInput = z.infer<typeof SetUserModerationStatusSchema>;

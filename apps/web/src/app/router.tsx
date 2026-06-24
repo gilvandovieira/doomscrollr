@@ -32,12 +32,23 @@ const createRouteDef = createRoute({
   component: lazyRouteComponent(() => import("../features/create/CreatePage.tsx"), "CreatePage"),
 });
 
-const adminReportsRoute = createRoute({
+// The console splits into two surfaces: Moderation (reports queue + audit) at
+// /admin, and Administration (tag curation) at /admin/tags.
+const adminRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: "/admin/reports",
+  path: "/admin",
   component: lazyRouteComponent(
     () => import("../features/admin/AdminReportsPage.tsx"),
     "AdminReportsPage",
+  ),
+});
+
+const adminTagsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/admin/tags",
+  component: lazyRouteComponent(
+    () => import("../features/admin/AdministrationPage.tsx"),
+    "AdministrationPage",
   ),
 });
 
@@ -93,7 +104,8 @@ const profileRoute = createRoute({
 const routeTree = rootRoute.addChildren([
   indexRoute,
   createRouteDef,
-  adminReportsRoute,
+  adminRoute,
+  adminTagsRoute,
   tagDirectoryRoute,
   tagRoute,
   notificationsRoute,

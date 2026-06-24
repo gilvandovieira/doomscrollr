@@ -18,6 +18,7 @@ import {
 import { NotificationListResponseSchema } from "@doomscrollr/shared/schemas/notification.schema.ts";
 import { ReactionResultSchema } from "@doomscrollr/shared/schemas/reaction.schema.ts";
 import {
+  AdminDomainBlockListResponseSchema,
   AdminReportListResponseSchema,
   ModerationAuditListResponseSchema,
   ModerationNoteSchema,
@@ -29,12 +30,14 @@ import {
 } from "@doomscrollr/shared/schemas/tag.schema.ts";
 import { UserProfileSchema } from "@doomscrollr/shared/schemas/user.schema.ts";
 import type {
+  AdminDomainBlock,
   AdminReportListQuery,
   AdminTag,
   BulkReportActionInput,
   Comment,
   CommentThreadResponse,
   CreateAdminTagInput,
+  CreateDomainBlockInput,
   CreateModerationNoteInput,
   CreatePostInput,
   CreatePostResponse,
@@ -379,6 +382,28 @@ export function fetchAdminTags(getToken: GetAuthToken): Promise<AdminTag[]> {
   return authedFetch("/api/admin/tags", { method: "GET", getToken }).then((data) =>
     AdminTagListResponseSchema.parse(data).items
   );
+}
+
+export function fetchAdminDomainBlocks(getToken: GetAuthToken): Promise<AdminDomainBlock[]> {
+  return authedFetch("/api/admin/moderation/domain-blocks", { method: "GET", getToken }).then((
+    data,
+  ) => AdminDomainBlockListResponseSchema.parse(data).items);
+}
+
+export function createAdminDomainBlock(
+  input: CreateDomainBlockInput,
+  getToken: GetAuthToken,
+): Promise<void> {
+  return authedFetch("/api/admin/moderation/domain-blocks", { body: input, getToken }).then(() =>
+    undefined
+  );
+}
+
+export function deleteAdminDomainBlock(domain: string, getToken: GetAuthToken): Promise<void> {
+  return authedFetch(`/api/admin/moderation/domain-blocks/${encodeURIComponent(domain)}`, {
+    method: "DELETE",
+    getToken,
+  }).then(() => undefined);
 }
 
 export function createAdminTag(

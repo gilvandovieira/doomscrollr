@@ -1629,6 +1629,44 @@ textarea:focus-visible,
     line-height: 1;
   }
 
+  .admin-policy-brief {
+    display: grid;
+    gap: 0.75rem;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-card);
+    background: color-mix(in oklch, oklch(var(--color-paper)), oklch(var(--color-newsprint)) 58%);
+    padding: 0.9rem 1rem;
+  }
+
+  .admin-policy-brief p,
+  .admin-policy-brief__rules span,
+  .admin-panel-note,
+  .admin-user-status__copy {
+    margin: 0;
+    color: var(--muted);
+    font-size: 0.82rem;
+    font-weight: 650;
+    line-height: 1.45;
+    text-wrap: pretty;
+  }
+
+  .admin-policy-brief strong,
+  .admin-policy-brief__rules strong,
+  .admin-panel-note strong,
+  .admin-user-status__copy strong {
+    color: oklch(var(--color-ink));
+    font-weight: 900;
+  }
+
+  .admin-policy-brief__rules {
+    display: grid;
+    gap: 0.45rem;
+  }
+
+  .admin-policy-brief__rules span {
+    display: block;
+  }
+
   .admin-section-title {
     margin: 0;
     font-size: 1.02rem;
@@ -1638,7 +1676,8 @@ textarea:focus-visible,
 
   .admin-queue,
   .admin-audit,
-  .admin-tags {
+  .admin-tags,
+  .admin-domain-blocks {
     display: grid;
     gap: 1rem;
     padding: 1rem;
@@ -1652,6 +1691,7 @@ textarea:focus-visible,
   }
 
   .admin-count-chip,
+  .admin-priority-chip,
   .admin-status-chip,
   .admin-type-chip,
   .admin-reason-pill {
@@ -1669,9 +1709,22 @@ textarea:focus-visible,
   }
 
   .admin-count-chip,
+  .admin-priority-chip,
   .admin-reason-pill {
     background: oklch(var(--color-newsprint));
     color: var(--muted);
+  }
+
+  .admin-priority-chip--high {
+    border-color: oklch(var(--color-signal) / 0.38);
+    background: oklch(var(--color-signal) / 0.13);
+    color: oklch(var(--color-signal));
+  }
+
+  .admin-priority-chip--low {
+    border-color: oklch(var(--color-oxide) / 0.3);
+    background: oklch(var(--color-oxide) / 0.09);
+    color: oklch(var(--color-oxide));
   }
 
   .admin-type-chip {
@@ -1702,6 +1755,12 @@ textarea:focus-visible,
     font-size: 0.82rem;
     font-weight: 650;
     line-height: 1.4;
+  }
+
+  .admin-panel-note {
+    border-radius: 10px;
+    background: oklch(var(--color-newsprint));
+    padding: 0.65rem 0.75rem;
   }
 
   .admin-filter-bar {
@@ -2004,10 +2063,14 @@ textarea:focus-visible,
 
   .admin-user-status {
     display: grid;
-    gap: 0.75rem;
+    gap: 0.8rem;
     border-radius: 10px;
     background: oklch(var(--color-newsprint));
     padding: 0.75rem;
+  }
+
+  .admin-user-status__copy {
+    color: oklch(var(--color-ink));
   }
 
   .admin-user-status__row {
@@ -2068,7 +2131,8 @@ textarea:focus-visible,
     padding-top: 0;
   }
 
-  .admin-tag-form {
+  .admin-tag-form,
+  .admin-domain-form {
     display: grid;
     gap: 0.7rem;
     border-radius: var(--radius-control);
@@ -2083,6 +2147,38 @@ textarea:focus-visible,
     border-radius: 14px;
     background: oklch(var(--color-paper));
     padding: 0.8rem;
+  }
+
+  .admin-domain-list {
+    display: grid;
+    gap: 0.65rem;
+  }
+
+  .admin-domain-row {
+    display: grid;
+    gap: 0.7rem;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: oklch(var(--color-paper));
+    padding: 0.8rem;
+  }
+
+  .admin-domain-row__domain {
+    margin: 0;
+    color: oklch(var(--color-ink));
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", monospace;
+    font-size: 0.95rem;
+    font-weight: 900;
+    overflow-wrap: anywhere;
+  }
+
+  .admin-domain-row__meta {
+    margin: 0.25rem 0 0;
+    color: var(--muted);
+    font-size: 0.78rem;
+    font-weight: 700;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
   }
 
   .admin-tag-row--disabled,
@@ -2154,6 +2250,113 @@ textarea:focus-visible,
   .admin-mono-field {
     font-family: ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", monospace;
     font-size: 0.86rem;
+  }
+
+  /* Console section switch (Moderation | Administration). */
+  .admin-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+  }
+
+  .admin-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    min-height: 2.5rem;
+    padding-inline: 0.95rem;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-control);
+    background: oklch(var(--color-paper));
+    color: var(--muted);
+    font-size: 0.9rem;
+    font-weight: 750;
+    text-decoration: none;
+    white-space: nowrap;
+    transition:
+      background-color var(--motion-state) var(--ease-out-quart),
+      color var(--motion-state) var(--ease-out-quart);
+  }
+
+  .admin-tab:hover {
+    background: oklch(var(--color-newsprint));
+    color: oklch(var(--color-ink));
+  }
+
+  .admin-tab--active,
+  .admin-tab--active:hover {
+    border-color: transparent;
+    background: oklch(var(--color-signal));
+    color: oklch(var(--color-pitch));
+  }
+
+  /* One administration tool per panel (create / merge / manage). */
+  .admin-tool {
+    display: grid;
+    gap: 1rem;
+    padding: 1rem;
+  }
+
+  .admin-tool__empty {
+    margin: 0;
+    color: var(--muted);
+    font-size: 0.9rem;
+    font-weight: 700;
+  }
+
+  /* Merge reads as a sentence: "Merge [tag] into [tag]" — direction is explicit. */
+  .admin-merge {
+    display: grid;
+    gap: 0.85rem;
+  }
+
+  .admin-merge__sentence {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .admin-merge__word {
+    color: oklch(var(--color-ink));
+    font-size: 0.95rem;
+    font-weight: 800;
+  }
+
+  .admin-merge__sentence select {
+    flex: 1 1 11rem;
+    min-width: 0;
+  }
+
+  .admin-merge-confirm {
+    display: grid;
+    gap: 0.55rem;
+    border: 1px solid oklch(var(--color-oxide) / 0.4);
+    border-radius: var(--radius-control);
+    background: oklch(var(--color-oxide) / 0.08);
+    padding: 0.85rem;
+  }
+
+  .admin-merge-confirm__q {
+    margin: 0;
+    color: oklch(var(--color-ink));
+    font-size: 0.98rem;
+    font-weight: 850;
+  }
+
+  .admin-merge-confirm__detail {
+    margin: 0;
+    color: oklch(var(--color-ink) / 0.8);
+    font-size: 0.85rem;
+    font-weight: 600;
+    line-height: 1.45;
+  }
+
+  .admin-merge-confirm__actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 0.5rem;
   }
 
   .admin-shell-state {
@@ -2254,6 +2457,11 @@ textarea:focus-visible,
       grid-template-columns: repeat(4, minmax(0, 1fr));
     }
 
+    .admin-policy-brief__rules {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 0.75rem;
+    }
+
     .admin-filter-bar {
       grid-template-columns: auto repeat(3, minmax(0, 1fr));
       align-items: end;
@@ -2282,8 +2490,22 @@ textarea:focus-visible,
       align-items: end;
     }
 
+    .admin-domain-form {
+      grid-template-columns: minmax(10rem, 0.9fr) minmax(12rem, 1fr) auto;
+      align-items: end;
+    }
+
     .admin-tag-form .tool-button {
       min-height: var(--control-height);
+    }
+
+    .admin-domain-form .tool-button {
+      min-height: var(--control-height);
+    }
+
+    .admin-domain-row {
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
     }
 
     .admin-tag-row__head {

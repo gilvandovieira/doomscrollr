@@ -22,18 +22,30 @@ export function Header() {
     void navigate({ to: "/" });
   }
 
-  // Tapping the logo on the feed: scroll to top; if already at the top, soft-refresh
-  // the feed (a data refetch, not a full page reload). From any other page, fall
-  // through so the Link navigates home as usual.
+  function scrollToTop() {
+    const reduceMotion = globalThis.matchMedia?.("(prefers-reduced-motion: reduce)").matches ??
+      false;
+    globalThis.scrollTo({ top: 0, behavior: reduceMotion ? "auto" : "smooth" });
+  }
+
+  // Tapping the logo on the feed: clear an active kind filter back to the full
+  // feed, else scroll to top, else (already at the top) soft-refresh the feed (a
+  // data refetch, not a full reload). From any other page, fall through so the
+  // Link navigates home as usual.
   function onLogoClick(event: React.MouseEvent) {
     if (location.pathname !== "/") return;
     event.preventDefault();
+
+    if ((location.search as { kind?: string }).kind) {
+      void navigate({ to: "/", search: {} });
+      scrollToTop();
+      return;
+    }
     if (globalThis.scrollY < 8) {
       void queryClient.invalidateQueries({ queryKey: ["feed", "recent"] });
       return;
     }
-    const reduceMotion = globalThis.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
-    globalThis.scrollTo({ top: 0, behavior: reduceMotion ? "auto" : "smooth" });
+    scrollToTop();
   }
 
   return (
@@ -87,7 +99,7 @@ function AdminConsoleLink() {
 
   return (
     <Link
-      to="/admin/reports"
+      to="/admin"
       className="icon-button icon-button--admin"
       aria-label="Moderation console"
       title="Moderation console"

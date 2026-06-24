@@ -19,7 +19,11 @@ import { checkImageIsFetchable, validateExternalImageUrl } from "../lib/image-ur
 import { enforceRateLimit, RATE_LIMITS } from "../lib/rate-limit.ts";
 import { parseOrThrow, readJsonBody } from "../lib/validation.ts";
 import { getAuthUser, getOptionalViewerId, requireUser } from "../middleware/auth.ts";
-import { extractYouTubeId, fetchYouTubeTitle, isYouTubeShort } from "../services/youtube.service.ts";
+import {
+  extractYouTubeId,
+  fetchYouTubeTitle,
+  isYouTubeShort,
+} from "../services/youtube.service.ts";
 import { isBlocked } from "../repositories/blocks.repository.ts";
 import {
   createComment,
@@ -29,6 +33,7 @@ import {
   listCommentsForPost,
 } from "../repositories/comments.repository.ts";
 import { recordPostEvent } from "../repositories/events.repository.ts";
+import { findBlockedDomainForUrl } from "../repositories/domain-blocks.repository.ts";
 import { createNotification } from "../repositories/notifications.repository.ts";
 import {
   createPost,
@@ -100,6 +105,7 @@ postsRoutes.post("/", requireUser, async (c) => {
   } else if (data.postKind === "external_image") {
     const structural = validateExternalImageUrl(data.imageUrl);
     if (!structural.ok) throw badRequest("That image URL is not allowed.");
+    await rejectBlockedDomain(data.imageUrl);
     await enforceRateLimit(`imgcheck:${user.id}`, RATE_LIMITS.imageCheck);
     const fetchable = await checkImageIsFetchable(data.imageUrl);
     if (!fetchable.ok) throw badRequest("That image could not be loaded as a supported image.");
@@ -108,6 +114,7 @@ postsRoutes.post("/", requireUser, async (c) => {
   } else {
     const videoId = extractYouTubeId(data.youtubeUrl);
     if (!videoId) throw badRequest("That YouTube URL is not supported.");
+    await rejectBlockedDomain(data.youtubeUrl);
     fields.youtubeUrl = data.youtubeUrl;
     fields.youtubeVideoId = videoId;
     fields.youtubeIsShort = isYouTubeShort(data.youtubeUrl);
@@ -120,6 +127,12 @@ postsRoutes.post("/", requireUser, async (c) => {
 
   return c.json({ post, canonicalUrl: buildCanonicalPostUrl(BASE_URL, post) }, 201);
 });
+
+async function rejectBlockedDomain(url: string): Promise<void> {
+  if (!hasDatabase()) return;
+  const block = await findBlockedDomainForUrl(url);
+  if (block) throw badRequest(`Links from ${block.domain} are blocked by moderation policy.`);
+}
 
 postsRoutes.post("/:postCode/reposts", requireUser, async (c) => {
   const user = getAuthUser(c);
