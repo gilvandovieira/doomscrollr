@@ -1,11 +1,19 @@
 import { mockReports } from "@doomscrollr/shared/mock-data.ts";
 import { Hono } from "hono";
+import { hasDatabase } from "../db/client.ts";
 import { notImplemented } from "../lib/errors.ts";
 import { requireAuth } from "../middleware/auth.ts";
+import { listOpenReports } from "../repositories/reports.repository.ts";
 
 export const moderationRoutes = new Hono();
 
-moderationRoutes.get("/reports", requireAuth, (c) => c.json({ items: mockReports }));
+moderationRoutes.get("/reports", requireAuth, async (c) => {
+  if (hasDatabase()) {
+    return c.json({ items: await listOpenReports() });
+  }
+
+  return c.json({ items: mockReports });
+});
 
 moderationRoutes.post("/reports/:id/dismiss", requireAuth, () => {
   throw notImplemented("Report dismissal will record a moderation action.");

@@ -7,6 +7,7 @@ export const ServerEnvSchema = z.object({
   PORT: z.coerce.number().int().min(1).max(65535).default(8000),
   DATABASE_URL: z.string().url().optional(),
   CLERK_SECRET_KEY: z.string().optional(),
+  CLERK_AUTHORIZED_PARTIES: z.string().optional(),
   YOUTUBE_API_KEY: z.string().optional(),
   GIPHY_API_KEY: z.string().optional(),
   ADSENSE_CLIENT_ID: z.string().optional(),

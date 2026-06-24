@@ -8,13 +8,13 @@ import {
   text,
   timestamp,
   uniqueIndex,
-  uuid,
 } from "drizzle-orm/pg-core";
 
 export const userRole = pgEnum("user_role", ["user", "moderator", "admin"]);
 export const userStatus = pgEnum("user_status", ["active", "restricted", "banned"]);
 export const mediaProvider = pgEnum("media_provider", ["upload", "youtube", "giphy", "tenor"]);
 export const mediaType = pgEnum("media_type", ["image", "gif", "video", "short"]);
+export const mediaStatus = pgEnum("media_status", ["ready", "pending_review", "blocked"]);
 export const aspectRatio = pgEnum("aspect_ratio", ["square", "landscape", "portrait", "unknown"]);
 export const contentStatus = pgEnum("content_status", [
   "published",
@@ -37,7 +37,7 @@ const timestamps = {
 };
 
 export const users = pgTable("users", {
-  id: uuid("id").primaryKey().defaultRandom(),
+  id: text("id").primaryKey(),
   clerkUserId: text("clerk_user_id").notNull(),
   username: text("username").notNull(),
   displayName: text("display_name").notNull(),
@@ -51,7 +51,7 @@ export const users = pgTable("users", {
 ]);
 
 export const mediaAssets = pgTable("media_assets", {
-  id: uuid("id").primaryKey().defaultRandom(),
+  id: text("id").primaryKey(),
   provider: mediaProvider("provider").notNull(),
   mediaType: mediaType("media_type").notNull(),
   providerMediaId: text("provider_media_id"),
@@ -66,14 +66,14 @@ export const mediaAssets = pgTable("media_assets", {
   attributionLabel: text("attribution_label"),
   attributionUrl: text("attribution_url"),
   metadataJson: jsonb("metadata_json"),
-  status: contentStatus("status").notNull().default("pending_review"),
+  status: mediaStatus("status").notNull().default("pending_review"),
   createdAt: timestamps.createdAt,
 });
 
 export const posts = pgTable("posts", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  authorId: uuid("author_id").notNull().references(() => users.id),
-  mediaAssetId: uuid("media_asset_id").notNull().references(() => mediaAssets.id),
+  id: text("id").primaryKey(),
+  authorId: text("author_id").notNull().references(() => users.id),
+  mediaAssetId: text("media_asset_id").notNull().references(() => mediaAssets.id),
   title: text("title").notNull(),
   slug: text("slug").notNull(),
   score: integer("score").notNull().default(0),
@@ -92,10 +92,10 @@ export const posts = pgTable("posts", {
 ]);
 
 export const comments = pgTable("comments", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  postId: uuid("post_id").notNull().references(() => posts.id),
-  authorId: uuid("author_id").notNull().references(() => users.id),
-  parentId: uuid("parent_id"),
+  id: text("id").primaryKey(),
+  postId: text("post_id").notNull().references(() => posts.id),
+  authorId: text("author_id").notNull().references(() => users.id),
+  parentId: text("parent_id"),
   body: text("body").notNull(),
   score: integer("score").notNull().default(0),
   status: contentStatus("status").notNull().default("published"),
@@ -107,9 +107,9 @@ export const comments = pgTable("comments", {
 ]);
 
 export const postVotes = pgTable("post_votes", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  userId: uuid("user_id").notNull().references(() => users.id),
-  postId: uuid("post_id").notNull().references(() => posts.id),
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => users.id),
+  postId: text("post_id").notNull().references(() => posts.id),
   value: integer("value").notNull(),
   createdAt: timestamps.createdAt,
 }, (table) => [
@@ -117,9 +117,9 @@ export const postVotes = pgTable("post_votes", {
 ]);
 
 export const commentVotes = pgTable("comment_votes", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  userId: uuid("user_id").notNull().references(() => users.id),
-  commentId: uuid("comment_id").notNull().references(() => comments.id),
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => users.id),
+  commentId: text("comment_id").notNull().references(() => comments.id),
   value: integer("value").notNull(),
   createdAt: timestamps.createdAt,
 }, (table) => [
@@ -127,25 +127,25 @@ export const commentVotes = pgTable("comment_votes", {
 ]);
 
 export const reports = pgTable("reports", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  reporterId: uuid("reporter_id").notNull().references(() => users.id),
+  id: text("id").primaryKey(),
+  reporterId: text("reporter_id").notNull().references(() => users.id),
   targetType: reportTargetType("target_type").notNull(),
-  targetId: uuid("target_id").notNull(),
+  targetId: text("target_id").notNull(),
   reason: text("reason").notNull(),
   details: text("details"),
   status: reportStatus("status").notNull().default("open"),
   createdAt: timestamps.createdAt,
   reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
-  reviewedBy: uuid("reviewed_by").references(() => users.id),
+  reviewedBy: text("reviewed_by").references(() => users.id),
 }, (table) => [
   index("reports_status_idx").on(table.status),
 ]);
 
 export const moderationActions = pgTable("moderation_actions", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  moderatorId: uuid("moderator_id").notNull().references(() => users.id),
+  id: text("id").primaryKey(),
+  moderatorId: text("moderator_id").notNull().references(() => users.id),
   targetType: reportTargetType("target_type").notNull(),
-  targetId: uuid("target_id").notNull(),
+  targetId: text("target_id").notNull(),
   action: text("action").notNull(),
   reason: text("reason"),
   metadataJson: jsonb("metadata_json"),
@@ -153,24 +153,24 @@ export const moderationActions = pgTable("moderation_actions", {
 });
 
 export const tags = pgTable("tags", {
-  id: uuid("id").primaryKey().defaultRandom(),
+  id: text("id").primaryKey(),
   name: text("name").notNull(),
 }, (table) => [
   uniqueIndex("tags_name_unique").on(table.name),
 ]);
 
 export const postTags = pgTable("post_tags", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  postId: uuid("post_id").notNull().references(() => posts.id),
-  tagId: uuid("tag_id").notNull().references(() => tags.id),
+  id: text("id").primaryKey(),
+  postId: text("post_id").notNull().references(() => posts.id),
+  tagId: text("tag_id").notNull().references(() => tags.id),
 }, (table) => [
   uniqueIndex("post_tags_post_tag_unique").on(table.postId, table.tagId),
 ]);
 
 export const savedPosts = pgTable("saved_posts", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  userId: uuid("user_id").notNull().references(() => users.id),
-  postId: uuid("post_id").notNull().references(() => posts.id),
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => users.id),
+  postId: text("post_id").notNull().references(() => posts.id),
   createdAt: timestamps.createdAt,
 }, (table) => [
   uniqueIndex("saved_posts_user_post_unique").on(table.userId, table.postId),

@@ -4,17 +4,22 @@
     ".": "./src/main.ts"
   },
   "tasks": {
-    "dev": "deno run --watch --allow-net --allow-env --allow-sys=hostname src/main.ts",
-    "start": "deno run --allow-net --allow-env --allow-sys=hostname src/main.ts",
+    "dev": "deno run --env-file=../../.env.local --watch --allow-net --allow-env --allow-sys=hostname src/main.ts",
+    "start": "deno run --env-file=../../.env.local --allow-net --allow-env --allow-sys=hostname src/main.ts",
     "check": "deno check src/main.ts",
     "test": "deno test --allow-env src"
   },
   "imports": {
+    "@clerk/backend": "npm:@clerk/backend@^3.7.1",
     "@doomscrollr/config/": "../../packages/config/src/",
+    "@doomscrollr/database/": "../../packages/database/src/",
     "@doomscrollr/shared/": "../../packages/shared/src/",
+    "drizzle-orm": "npm:drizzle-orm@^0.44.5",
+    "drizzle-orm/postgres-js": "npm:drizzle-orm@^0.44.5/postgres-js",
     "hono": "npm:hono@^4.8.12",
     "hono/cors": "npm:hono@^4.8.12/cors",
     "pino": "npm:pino@^9.7.0",
+    "postgres": "npm:postgres@^3.4.7",
     "zod": "npm:zod@^3.25.76"
   }
 }

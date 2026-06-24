@@ -23,6 +23,8 @@
     "dev:api": "deno task --cwd apps/api dev",
     "dev:web": "deno task --cwd apps/web dev",
     "build:web": "deno task --cwd apps/web build",
+    "db:migrate": "deno task --filter @doomscrollr/database migrate",
+    "db:seed": "deno task --filter @doomscrollr/database seed",
     "check": "deno task --filter @doomscrollr/api check && deno task --filter @doomscrollr/web check && deno task --filter @doomscrollr/config check && deno task --filter @doomscrollr/database check && deno task --filter @doomscrollr/shared check",
     "test": "deno test --allow-env --permit-no-files packages apps"
   },

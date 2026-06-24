@@ -22,20 +22,42 @@ import type {
   UserProfile,
 } from "@doomscrollr/shared/types.ts";
 import { z } from "zod";
+import { type GetAuthToken, HAS_CLERK } from "./auth.ts";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
-const HAS_CLERK = Boolean(import.meta.env.VITE_CLERK_PUBLISHABLE_KEY);
 
-async function getJson<T>(path: string, fallback: () => T | Promise<T>) {
+type RequestOptions = {
+  authToken?: GetAuthToken;
+  fallbackOnError?: boolean;
+};
+
+async function getJson<T>(
+  path: string,
+  fallback: () => T | Promise<T>,
+  options: RequestOptions = {},
+) {
   try {
-    const response = await fetch(`${API_BASE_URL}${path}`);
+    const headers = new Headers();
+    const token = await options.authToken?.();
+
+    if (token) {
+      headers.set("authorization", `Bearer ${token}`);
+    }
+
+    const response = await fetch(`${API_BASE_URL}${path}`, {
+      headers,
+    });
 
     if (!response.ok) {
       throw new Error(`Request failed with ${response.status}`);
     }
 
     return await response.json();
-  } catch {
+  } catch (error) {
+    if (options.fallbackOnError === false) {
+      throw error;
+    }
+
     return await fallback();
   }
 }
@@ -129,11 +151,18 @@ export async function fetchUserPosts(username: string): Promise<FeedResponse> {
   return FeedResponseSchema.parse(data);
 }
 
-export async function fetchModerationReports(): Promise<Report[]> {
+export async function fetchModerationReports(authToken?: GetAuthToken): Promise<Report[]> {
   if (!HAS_CLERK) {
     return mockReports;
   }
 
-  const data = await getJson("/api/moderation/reports", () => ({ items: mockReports }));
+  const data = await getJson(
+    "/api/moderation/reports",
+    () => ({ items: mockReports }),
+    {
+      authToken,
+      fallbackOnError: false,
+    },
+  );
   return z.object({ items: z.array(ReportSchema) }).parse(data).items;
 }

@@ -1,5 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { Flame, ShieldCheck, Upload } from "lucide-react";
+import { AuthControls } from "./AuthControls.tsx";
 
 const navLinkClass =
   "inline-flex h-10 items-center border-2 border-ink bg-paper px-3 text-sm font-black uppercase text-ink transition hover:-translate-y-0.5 hover:bg-signal";
@@ -36,6 +37,7 @@ export function Header() {
           <Link to="/moderation" className="icon-button" aria-label="Moderation queue">
             <ShieldCheck aria-hidden="true" size={19} />
           </Link>
+          <AuthControls />
         </nav>
       </div>
     </header>

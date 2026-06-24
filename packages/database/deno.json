@@ -4,10 +4,14 @@
     "./schema": "./src/schema.ts"
   },
   "tasks": {
-    "check": "deno check src/schema.ts",
+    "check": "deno check src/schema.ts src/migrate.ts src/seed.ts",
+    "migrate": "deno run --env-file=../../.env.local --allow-env --allow-net --allow-read src/migrate.ts",
+    "seed": "deno run --env-file=../../.env.local --allow-env --allow-net src/seed.ts",
     "test": "deno test src"
   },
   "imports": {
-    "drizzle-orm/pg-core": "npm:drizzle-orm@^0.44.5/pg-core"
+    "@doomscrollr/shared/": "../shared/src/",
+    "drizzle-orm/pg-core": "npm:drizzle-orm@^0.44.5/pg-core",
+    "postgres": "npm:postgres@^3.4.7"
   }
 }
