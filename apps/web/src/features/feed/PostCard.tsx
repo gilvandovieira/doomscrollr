@@ -1,21 +1,18 @@
 import type { FeedPost } from "@doomscrollr/shared/types.ts";
 import { Link } from "@tanstack/react-router";
-import { Flag, MessageCircle, Share2 } from "lucide-react";
-import { MediaRenderer } from "../../components/MediaRenderer.tsx";
-import { VoteButton } from "../../components/VoteButton.tsx";
+import { MessageCircle } from "lucide-react";
+import { PostMedia } from "../../components/PostMedia.tsx";
 
-type PostCardProps = {
-  post: FeedPost;
-  rank: number;
+const KIND_LABEL: Record<FeedPost["postKind"], string> = {
+  text: "Text",
+  external_image: "Image",
+  youtube: "YouTube",
 };
 
-export function PostCard({ post, rank }: PostCardProps) {
+export function PostCard({ post }: { post: FeedPost }) {
   return (
     <article className="feed-card">
       <div className="flex items-center justify-between border-b-2 border-ink bg-newsprint px-3 py-2">
-        <span className="font-mono text-xs font-black uppercase text-oxide">
-          #{String(rank).padStart(2, "0")}
-        </span>
         <Link
           to="/$username"
           params={{ username: `@${post.author.username}` }}
@@ -23,50 +20,46 @@ export function PostCard({ post, rank }: PostCardProps) {
         >
           @{post.author.username}
         </Link>
+        <span className="font-mono text-[11px] font-black uppercase text-oxide">
+          {KIND_LABEL[post.postKind]}
+        </span>
       </div>
 
-      <Link to="/post/$postId" params={{ postId: post.id }} className="block">
-        <MediaRenderer media={post.media} mode="card" />
+      <Link
+        to="/p/$postCode/$slug"
+        params={{ postCode: post.publicCode, slug: post.slug }}
+        className="block"
+      >
+        <h2 className="px-3 pt-3 text-xl font-black leading-tight hover:underline">{post.title}</h2>
+        <PostMedia post={post} mode="card" />
       </Link>
 
       <div className="space-y-3 p-3">
-        <Link
-          to="/post/$postId"
-          params={{ postId: post.id }}
-          className="block text-xl font-black leading-tight hover:underline"
-        >
-          {post.title}
-        </Link>
-
-        <div className="flex flex-wrap gap-2">
-          {post.tags.map((tag) => (
-            <span
-              key={tag}
-              className="border-2 border-ink bg-cyan px-2 py-1 font-mono text-[11px] font-black uppercase text-ink"
-            >
-              {tag}
-            </span>
-          ))}
-        </div>
+        {post.tags.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {post.tags.map((tag) => (
+              <span
+                key={tag}
+                className="border-2 border-ink bg-cyan px-2 py-1 font-mono text-[11px] font-black uppercase text-ink"
+              >
+                #{tag}
+              </span>
+            ))}
+          </div>
+        )}
 
         <div className="flex items-center justify-between gap-2">
-          <VoteButton score={post.score} compact />
-          <div className="flex items-center gap-2">
-            <Link
-              to="/post/$postId"
-              params={{ postId: post.id }}
-              className="icon-button"
-              aria-label={`${post.commentCount} comments`}
-            >
-              <MessageCircle aria-hidden="true" size={18} />
-            </Link>
-            <button type="button" className="icon-button" aria-label="Share post">
-              <Share2 aria-hidden="true" size={18} />
-            </button>
-            <button type="button" className="icon-button" aria-label="Report post">
-              <Flag aria-hidden="true" size={18} />
-            </button>
-          </div>
+          <span className="font-mono text-xs font-black uppercase">
+            {post.score} {post.score === 1 ? "point" : "points"}
+          </span>
+          <Link
+            to="/p/$postCode/$slug"
+            params={{ postCode: post.publicCode, slug: post.slug }}
+            className="inline-flex items-center gap-1 font-mono text-xs font-black uppercase hover:underline"
+          >
+            <MessageCircle aria-hidden="true" size={16} />
+            {post.commentCount}
+          </Link>
         </div>
       </div>
     </article>

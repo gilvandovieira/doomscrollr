@@ -1,35 +1,31 @@
+import { sql } from "drizzle-orm";
 import {
+  boolean,
+  check,
   index,
   integer,
   jsonb,
   pgEnum,
   pgTable,
-  real,
+  primaryKey,
+  smallint,
   text,
   timestamp,
   uniqueIndex,
+  uuid,
 } from "drizzle-orm/pg-core";
+import type { AnyPgColumn } from "drizzle-orm/pg-core";
 
-export const userRole = pgEnum("user_role", ["user", "moderator", "admin"]);
-export const userStatus = pgEnum("user_status", ["active", "restricted", "banned"]);
-export const mediaProvider = pgEnum("media_provider", ["upload", "youtube", "giphy", "tenor"]);
-export const mediaType = pgEnum("media_type", ["image", "gif", "video", "short"]);
-export const mediaStatus = pgEnum("media_status", ["ready", "pending_review", "blocked"]);
-export const aspectRatio = pgEnum("aspect_ratio", ["square", "landscape", "portrait", "unknown"]);
-export const contentStatus = pgEnum("content_status", [
-  "published",
-  "hidden",
-  "removed",
-  "pending_review",
-]);
-export const monetizationStatus = pgEnum("monetization_status", [
-  "enabled",
-  "disabled",
-  "pending_review",
-  "unsafe",
-]);
-export const reportStatus = pgEnum("report_status", ["open", "dismissed", "actioned"]);
+// v1 data model (spec §8 + §10.2). Posts store only the fields they need; there is
+// no generalized media_assets lifecycle, no content rating, no ranking, no ads.
+
+export const userRole = pgEnum("user_role", ["user", "admin"]);
+export const userStatus = pgEnum("user_status", ["active", "limited", "suspended", "banned"]);
+export const postKind = pgEnum("post_kind", ["text", "external_image", "youtube"]);
+export const postStatus = pgEnum("post_status", ["published", "removed"]);
+export const commentStatus = pgEnum("comment_status", ["published", "removed"]);
 export const reportTargetType = pgEnum("report_target_type", ["post", "comment", "user"]);
+export const reportStatus = pgEnum("report_status", ["open", "dismissed", "actioned"]);
 
 const timestamps = {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -37,10 +33,10 @@ const timestamps = {
 };
 
 export const users = pgTable("users", {
-  id: text("id").primaryKey(),
+  id: uuid("id").primaryKey(),
   clerkUserId: text("clerk_user_id").notNull(),
   username: text("username").notNull(),
-  displayName: text("display_name").notNull(),
+  displayName: text("display_name"),
   avatarUrl: text("avatar_url"),
   role: userRole("role").notNull().default("user"),
   status: userStatus("status").notNull().default("active"),
@@ -48,130 +44,160 @@ export const users = pgTable("users", {
 }, (table) => [
   uniqueIndex("users_clerk_user_id_unique").on(table.clerkUserId),
   uniqueIndex("users_username_unique").on(table.username),
+  check("users_username_format", sql`${table.username} ~ '^[a-z0-9_]{3,24}$'`),
 ]);
 
-export const mediaAssets = pgTable("media_assets", {
-  id: text("id").primaryKey(),
-  provider: mediaProvider("provider").notNull(),
-  mediaType: mediaType("media_type").notNull(),
-  providerMediaId: text("provider_media_id"),
-  originalUrl: text("original_url"),
-  embedUrl: text("embed_url"),
-  thumbnailUrl: text("thumbnail_url").notNull(),
-  previewUrl: text("preview_url"),
-  width: integer("width"),
-  height: integer("height"),
-  durationSeconds: integer("duration_seconds"),
-  aspectRatio: aspectRatio("aspect_ratio").notNull().default("unknown"),
-  attributionLabel: text("attribution_label"),
-  attributionUrl: text("attribution_url"),
-  metadataJson: jsonb("metadata_json"),
-  status: mediaStatus("status").notNull().default("pending_review"),
-  createdAt: timestamps.createdAt,
-});
-
 export const posts = pgTable("posts", {
-  id: text("id").primaryKey(),
-  authorId: text("author_id").notNull().references(() => users.id),
-  mediaAssetId: text("media_asset_id").notNull().references(() => mediaAssets.id),
+  id: uuid("id").primaryKey(),
+  publicCode: text("public_code").notNull(),
+  authorId: uuid("author_id").notNull().references(() => users.id),
+  postKind: postKind("post_kind").notNull(),
   title: text("title").notNull(),
   slug: text("slug").notNull(),
+  bodyText: text("body_text"),
+  imageUrl: text("image_url"),
+  youtubeUrl: text("youtube_url"),
+  youtubeVideoId: text("youtube_video_id"),
+  youtubeIsShort: boolean("youtube_is_short").notNull().default(false),
+  status: postStatus("status").notNull().default("published"),
+  removalReason: text("removal_reason"),
+  removedByUserId: uuid("removed_by_user_id").references(() => users.id),
+  removedAt: timestamp("removed_at", { withTimezone: true }),
   score: integer("score").notNull().default(0),
-  upvoteCount: integer("upvote_count").notNull().default(0),
-  downvoteCount: integer("downvote_count").notNull().default(0),
+  reactionCount: integer("reaction_count").notNull().default(0),
   commentCount: integer("comment_count").notNull().default(0),
-  status: contentStatus("status").notNull().default("published"),
-  monetizationStatus: monetizationStatus("monetization_status").notNull().default("pending_review"),
-  adSafetyScore: real("ad_safety_score").notNull().default(0),
+  reportCount: integer("report_count").notNull().default(0),
   ...timestamps,
 }, (table) => [
-  index("posts_created_at_idx").on(table.createdAt),
-  index("posts_score_idx").on(table.score),
-  index("posts_status_idx").on(table.status),
-  index("posts_monetization_status_idx").on(table.monetizationStatus),
+  uniqueIndex("posts_public_code_unique").on(table.publicCode),
+  index("posts_recent_idx").on(table.createdAt, table.id),
+  index("posts_author_recent_idx").on(table.authorId, table.createdAt, table.id),
+  check("posts_title_length", sql`length(trim(${table.title})) BETWEEN 3 AND 180`),
+  check(
+    "posts_kind_fields",
+    sql`(
+      ${table.postKind} = 'text'
+      AND ${table.bodyText} IS NOT NULL
+      AND length(trim(${table.bodyText})) > 0
+      AND ${table.imageUrl} IS NULL
+      AND ${table.youtubeUrl} IS NULL
+      AND ${table.youtubeVideoId} IS NULL
+    ) OR (
+      ${table.postKind} = 'external_image'
+      AND ${table.bodyText} IS NULL
+      AND ${table.imageUrl} IS NOT NULL
+      AND ${table.youtubeUrl} IS NULL
+      AND ${table.youtubeVideoId} IS NULL
+    ) OR (
+      ${table.postKind} = 'youtube'
+      AND ${table.bodyText} IS NULL
+      AND ${table.youtubeUrl} IS NOT NULL
+      AND ${table.youtubeVideoId} IS NOT NULL
+      AND ${table.imageUrl} IS NULL
+    )`,
+  ),
 ]);
 
 export const comments = pgTable("comments", {
-  id: text("id").primaryKey(),
-  postId: text("post_id").notNull().references(() => posts.id),
-  authorId: text("author_id").notNull().references(() => users.id),
-  parentId: text("parent_id"),
-  body: text("body").notNull(),
+  id: uuid("id").primaryKey(),
+  publicCode: text("public_code").notNull(),
+  postId: uuid("post_id").notNull().references(() => posts.id, { onDelete: "cascade" }),
+  authorId: uuid("author_id").notNull().references(() => users.id),
+  parentCommentId: uuid("parent_comment_id").references((): AnyPgColumn => comments.id),
+  bodyText: text("body_text").notNull(),
+  status: commentStatus("status").notNull().default("published"),
   score: integer("score").notNull().default(0),
-  status: contentStatus("status").notNull().default("published"),
-  moderationStatus: text("moderation_status").notNull().default("clean"),
+  reactionCount: integer("reaction_count").notNull().default(0),
+  replyCount: integer("reply_count").notNull().default(0),
+  removalReason: text("removal_reason"),
+  removedByUserId: uuid("removed_by_user_id").references(() => users.id),
+  removedAt: timestamp("removed_at", { withTimezone: true }),
   ...timestamps,
 }, (table) => [
-  index("comments_post_id_idx").on(table.postId),
-  index("comments_parent_id_idx").on(table.parentId),
+  uniqueIndex("comments_public_code_unique").on(table.publicCode),
+  index("comments_post_recent_idx").on(table.postId, table.createdAt, table.id),
+  index("comments_parent_idx").on(table.parentCommentId, table.createdAt, table.id),
+  check("comments_body_length", sql`length(trim(${table.bodyText})) BETWEEN 1 AND 2000`),
 ]);
 
-export const postVotes = pgTable("post_votes", {
-  id: text("id").primaryKey(),
-  userId: text("user_id").notNull().references(() => users.id),
-  postId: text("post_id").notNull().references(() => posts.id),
-  value: integer("value").notNull(),
-  createdAt: timestamps.createdAt,
+export const postReactions = pgTable("post_reactions", {
+  userId: uuid("user_id").notNull().references(() => users.id),
+  postId: uuid("post_id").notNull().references(() => posts.id, { onDelete: "cascade" }),
+  value: smallint("value").notNull(),
+  ...timestamps,
 }, (table) => [
-  uniqueIndex("post_votes_user_post_unique").on(table.userId, table.postId),
+  primaryKey({ columns: [table.userId, table.postId] }),
+  check("post_reactions_value", sql`${table.value} IN (-1, 1)`),
 ]);
 
-export const commentVotes = pgTable("comment_votes", {
-  id: text("id").primaryKey(),
-  userId: text("user_id").notNull().references(() => users.id),
-  commentId: text("comment_id").notNull().references(() => comments.id),
-  value: integer("value").notNull(),
-  createdAt: timestamps.createdAt,
+export const commentReactions = pgTable("comment_reactions", {
+  userId: uuid("user_id").notNull().references(() => users.id),
+  commentId: uuid("comment_id").notNull().references(() => comments.id, { onDelete: "cascade" }),
+  value: smallint("value").notNull(),
+  ...timestamps,
 }, (table) => [
-  uniqueIndex("comment_votes_user_comment_unique").on(table.userId, table.commentId),
+  primaryKey({ columns: [table.userId, table.commentId] }),
+  check("comment_reactions_value", sql`${table.value} IN (-1, 1)`),
 ]);
 
 export const reports = pgTable("reports", {
-  id: text("id").primaryKey(),
-  reporterId: text("reporter_id").notNull().references(() => users.id),
+  id: uuid("id").primaryKey(),
+  reporterUserId: uuid("reporter_user_id").notNull().references(() => users.id),
   targetType: reportTargetType("target_type").notNull(),
-  targetId: text("target_id").notNull(),
+  targetId: uuid("target_id").notNull(),
   reason: text("reason").notNull(),
   details: text("details"),
   status: reportStatus("status").notNull().default("open"),
-  createdAt: timestamps.createdAt,
-  reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
-  reviewedBy: text("reviewed_by").references(() => users.id),
+  ...timestamps,
 }, (table) => [
   index("reports_status_idx").on(table.status),
 ]);
 
-export const moderationActions = pgTable("moderation_actions", {
-  id: text("id").primaryKey(),
-  moderatorId: text("moderator_id").notNull().references(() => users.id),
-  targetType: reportTargetType("target_type").notNull(),
-  targetId: text("target_id").notNull(),
-  action: text("action").notNull(),
-  reason: text("reason"),
-  metadataJson: jsonb("metadata_json"),
+export const userBlocks = pgTable("user_blocks", {
+  blockerUserId: uuid("blocker_user_id").notNull().references(() => users.id, {
+    onDelete: "cascade",
+  }),
+  blockedUserId: uuid("blocked_user_id").notNull().references(() => users.id, {
+    onDelete: "cascade",
+  }),
   createdAt: timestamps.createdAt,
-});
+}, (table) => [
+  primaryKey({ columns: [table.blockerUserId, table.blockedUserId] }),
+  check("user_blocks_distinct", sql`${table.blockerUserId} <> ${table.blockedUserId}`),
+]);
 
 export const tags = pgTable("tags", {
-  id: text("id").primaryKey(),
-  name: text("name").notNull(),
+  id: uuid("id").primaryKey(),
+  slug: text("slug").notNull(),
+  displayName: text("display_name").notNull(),
+  description: text("description"),
+  status: text("status").notNull().default("active"),
+  postCount: integer("post_count").notNull().default(0),
+  ...timestamps,
 }, (table) => [
-  uniqueIndex("tags_name_unique").on(table.name),
+  uniqueIndex("tags_slug_unique").on(table.slug),
+  check("tags_slug_format", sql`${table.slug} ~ '^[a-z0-9-]{2,32}$'`),
 ]);
 
 export const postTags = pgTable("post_tags", {
-  id: text("id").primaryKey(),
-  postId: text("post_id").notNull().references(() => posts.id),
-  tagId: text("tag_id").notNull().references(() => tags.id),
-}, (table) => [
-  uniqueIndex("post_tags_post_tag_unique").on(table.postId, table.tagId),
-]);
-
-export const savedPosts = pgTable("saved_posts", {
-  id: text("id").primaryKey(),
-  userId: text("user_id").notNull().references(() => users.id),
-  postId: text("post_id").notNull().references(() => posts.id),
+  postId: uuid("post_id").notNull().references(() => posts.id, { onDelete: "cascade" }),
+  tagId: uuid("tag_id").notNull().references(() => tags.id, { onDelete: "cascade" }),
   createdAt: timestamps.createdAt,
 }, (table) => [
-  uniqueIndex("saved_posts_user_post_unique").on(table.userId, table.postId),
+  primaryKey({ columns: [table.postId, table.tagId] }),
+]);
+
+export const postEvents = pgTable("post_events", {
+  id: uuid("id").primaryKey(),
+  postId: uuid("post_id").notNull().references(() => posts.id, { onDelete: "cascade" }),
+  actorUserId: uuid("actor_user_id").references(() => users.id),
+  anonSessionId: text("anon_session_id"),
+  eventType: text("event_type").notNull(),
+  metadata: jsonb("metadata"),
+  createdAt: timestamps.createdAt,
+}, (table) => [
+  index("post_events_post_idx").on(table.postId, table.createdAt),
+  index("post_events_anon_idx").on(table.anonSessionId, table.createdAt).where(
+    sql`${table.anonSessionId} IS NOT NULL`,
+  ),
 ]);

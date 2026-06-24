@@ -25,6 +25,22 @@ export function unauthorized(message = "Authentication is required.") {
   return new HttpError(401, "UNAUTHORIZED", message);
 }
 
+export function forbidden(message = "You do not have permission to do that.") {
+  return new HttpError(403, "FORBIDDEN", message);
+}
+
+export function conflict(code: string, message: string) {
+  return new HttpError(409, code, message);
+}
+
+export function tooManyRequests(message = "Too many requests. Slow down.") {
+  return new HttpError(429, "RATE_LIMITED", message);
+}
+
+export function badRequest(message: string, issues?: ErrorIssue[]) {
+  return new HttpError(400, "BAD_REQUEST", message, issues);
+}
+
 export function notImplemented(message = "This endpoint is reserved for a later MVP phase.") {
   return new HttpError(501, "NOT_IMPLEMENTED", message);
 }

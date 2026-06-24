@@ -1,573 +1,393 @@
-import { FeedCursorSchema } from "./schemas/pagination.schema.ts";
+import { RecentCursorSchema } from "./schemas/pagination.schema.ts";
 import type {
   Author,
   Comment,
   FeedPost,
   FeedResponse,
-  FeedSort,
-  MediaAsset,
+  PostDetail,
   Report,
   UserProfile,
 } from "./types.ts";
 
+// Deterministic clock so seeded/mock timestamps are stable.
 const MOCK_NOW = Date.parse("2026-06-24T12:00:00.000Z");
+const MOCK_EPOCH = Date.parse("2026-01-01T12:00:00.000Z");
 
-const authors: Author[] = [
-  {
-    id: "user_lucas",
-    username: "lucas",
-    displayName: "Lucas",
-    avatarUrl: "https://api.dicebear.com/9.x/shapes/svg?seed=lucas",
-  },
-  {
-    id: "user_maya",
-    username: "maya",
-    displayName: "Maya",
-    avatarUrl: "https://api.dicebear.com/9.x/shapes/svg?seed=maya",
-  },
-  {
-    id: "user_ren",
-    username: "ren",
-    displayName: "Ren",
-    avatarUrl: "https://api.dicebear.com/9.x/shapes/svg?seed=ren",
-  },
-  {
-    id: "user_ana",
-    username: "ana",
-    displayName: "Ana",
-    avatarUrl: "https://api.dicebear.com/9.x/shapes/svg?seed=ana",
-  },
+function hoursAgo(hours: number): string {
+  return new Date(MOCK_NOW - hours * 60 * 60 * 1000).toISOString();
+}
+
+function canonicalPath(publicCode: string, slug: string): string {
+  return `/p/${publicCode}/${slug}`;
+}
+
+export type MockUser = {
+  username: string;
+  displayName: string;
+  avatarUrl: string;
+  role: "user" | "admin";
+  status: "active" | "limited" | "suspended" | "banned";
+  createdAtHoursOffset: number; // days from MOCK_EPOCH, kept small for stable data
+};
+
+export const mockUsers: MockUser[] = [
+  { username: "lucas", displayName: "Lucas", avatarUrl: avatar("lucas"), role: "admin", status: "active", createdAtHoursOffset: 0 },
+  { username: "maya", displayName: "Maya", avatarUrl: avatar("maya"), role: "user", status: "active", createdAtHoursOffset: 1 },
+  { username: "ren", displayName: "Ren", avatarUrl: avatar("ren"), role: "user", status: "active", createdAtHoursOffset: 2 },
+  { username: "ana", displayName: "Ana", avatarUrl: avatar("ana"), role: "user", status: "active", createdAtHoursOffset: 3 },
 ];
 
-function youtubeMedia(
-  id: string,
-  mediaType: "video" | "short",
-  aspectRatio: "landscape" | "portrait",
-): MediaAsset {
-  return {
-    id: `media_youtube_${id}`,
-    provider: "youtube",
-    mediaType,
-    providerMediaId: id,
-    originalUrl: mediaType === "short"
-      ? `https://www.youtube.com/shorts/${id}`
-      : `https://www.youtube.com/watch?v=${id}`,
-    embedUrl: `https://www.youtube.com/embed/${id}`,
-    thumbnailUrl: `https://i.ytimg.com/vi/${id}/hqdefault.jpg`,
-    previewUrl: null,
-    width: aspectRatio === "portrait" ? 720 : 1280,
-    height: aspectRatio === "portrait" ? 1280 : 720,
-    durationSeconds: null,
-    aspectRatio,
-    attributionLabel: "YouTube",
-    attributionUrl: "https://www.youtube.com",
-    status: "ready",
-  };
+function avatar(seed: string): string {
+  return `https://api.dicebear.com/9.x/shapes/svg?seed=${seed}`;
 }
 
-function giphyMedia(id: string, seed: string): MediaAsset {
-  return {
-    id: `media_giphy_${id}`,
-    provider: "giphy",
-    mediaType: "gif",
-    providerMediaId: id,
-    originalUrl: `https://giphy.com/gifs/${id}`,
-    embedUrl: null,
-    thumbnailUrl: `https://media.giphy.com/media/${id}/200_s.gif`,
-    previewUrl: `https://media.giphy.com/media/${id}/giphy.gif`,
-    width: 480,
-    height: 360,
-    durationSeconds: null,
-    aspectRatio: "landscape",
-    attributionLabel: `GIPHY / ${seed}`,
-    attributionUrl: `https://giphy.com/gifs/${id}`,
-    status: "ready",
-  };
-}
+export type MockTag = {
+  slug: string;
+  displayName: string;
+  description: string;
+};
 
-function uploadImage(seed: string, aspectRatio: "square" | "landscape" | "portrait"): MediaAsset {
-  const dimensions = {
-    square: [900, 900],
-    landscape: [1280, 720],
-    portrait: [720, 1120],
-  }[aspectRatio];
+export const mockTags: MockTag[] = [
+  { slug: "programming", displayName: "Programming", description: "Code, builds, and outages." },
+  { slug: "internet", displayName: "Internet", description: "Online culture and history." },
+  { slug: "memes", displayName: "Memes", description: "Reusable jokes in image form." },
+  { slug: "music", displayName: "Music", description: "Songs, clips, and shorts." },
+];
 
-  return {
-    id: `media_upload_${seed}`,
-    provider: "upload",
-    mediaType: "image",
-    providerMediaId: null,
-    originalUrl: `https://picsum.photos/seed/${seed}/${dimensions[0]}/${dimensions[1]}`,
-    embedUrl: null,
-    thumbnailUrl: `https://picsum.photos/seed/${seed}/${dimensions[0]}/${dimensions[1]}`,
-    previewUrl: null,
-    width: dimensions[0],
-    height: dimensions[1],
-    durationSeconds: null,
-    aspectRatio,
-    attributionLabel: "Seeded upload",
-    attributionUrl: null,
-    status: "ready",
-  };
-}
+export type MockPost = {
+  key: string;
+  publicCode: string;
+  slug: string;
+  postKind: "text" | "external_image" | "youtube";
+  title: string;
+  bodyText: string | null;
+  imageUrl: string | null;
+  youtubeUrl: string | null;
+  youtubeVideoId: string | null;
+  youtubeIsShort: boolean;
+  status: "published" | "removed";
+  score: number;
+  reactionCount: number;
+  commentCount: number;
+  reportCount: number;
+  authorUsername: string;
+  tags: string[]; // tag slugs
+  hoursAgo: number;
+};
 
-function post(
-  index: number,
-  title: string,
-  author: Author,
-  media: MediaAsset,
-  score: number,
-  commentCount: number,
-  hoursAgo: number,
-  tags: string[],
-): FeedPost {
-  const downvoteCount = Math.max(0, Math.floor(score * 0.08));
-  const upvoteCount = score + downvoteCount;
-  const createdAt = new Date(MOCK_NOW - hoursAgo * 60 * 60 * 1000).toISOString();
-
-  return {
-    id: `post_${String(index).padStart(3, "0")}`,
-    title,
-    slug: title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""),
-    score,
-    upvoteCount,
-    downvoteCount,
-    commentCount,
+export const mockPosts: MockPost[] = [
+  {
+    key: "post-friday",
+    publicCode: "7kF3mQx9Za",
+    slug: "when-prod-breaks-on-friday",
+    postKind: "text",
+    title: "When prod breaks on Friday",
+    bodyText:
+      "Nothing focuses a team like a 4:55pm deploy. Drop your worst Friday incident story below.",
+    imageUrl: null,
+    youtubeUrl: null,
+    youtubeVideoId: null,
+    youtubeIsShort: false,
     status: "published",
-    monetizationStatus: index % 7 === 0 ? "pending_review" : "enabled",
-    adSafetyScore: index % 7 === 0 ? 0.62 : 0.96,
-    createdAt,
-    updatedAt: createdAt,
-    author,
-    media,
-    tags,
-  };
-}
-
-export const mockPosts: FeedPost[] = [
-  post(
-    1,
-    "When production breaks on Friday",
-    authors[0],
-    youtubeMedia("dQw4w9WgXcQ", "video", "landscape"),
-    421,
-    32,
-    2,
-    ["dev", "friday"],
-  ),
-  post(
-    2,
-    "The group chat after one ambiguous deploy log",
-    authors[1],
-    giphyMedia("l0MYt5jPR6QX5pnqM", "reactions"),
-    287,
-    18,
-    3,
-    ["chat", "deploy"],
-  ),
-  post(
-    3,
-    "Short-form chaos in exactly eleven seconds",
-    authors[2],
-    youtubeMedia("jNQXAC9IVRw", "short", "portrait"),
-    199,
-    44,
-    5,
-    ["shorts", "internet"],
-  ),
-  post(
-    4,
-    "This meeting could have been an error boundary",
-    authors[3],
-    uploadImage("meeting-error-boundary", "square"),
-    356,
-    21,
-    7,
-    ["work", "react"],
-  ),
-  post(
-    5,
-    "Trying to explain cursor pagination at dinner",
-    authors[0],
-    uploadImage("cursor-dinner", "landscape"),
-    154,
-    12,
-    9,
-    ["backend", "database"],
-  ),
-  post(
-    6,
-    "POV: the cache invalidated itself",
-    authors[1],
-    giphyMedia("xT9IgG50Fb7Mi0prBC", "cache"),
-    512,
-    67,
-    12,
-    ["cache", "frontend"],
-  ),
-  post(
-    7,
-    "Every upload flow has a secret boss fight",
-    authors[2],
-    uploadImage("upload-boss-fight", "portrait"),
-    88,
-    9,
-    14,
-    ["upload", "moderation"],
-  ),
-  post(
-    8,
-    "The moment the logs finally make sense",
-    authors[3],
-    youtubeMedia("M7lc1UVf-VE", "video", "landscape"),
-    244,
-    19,
-    16,
-    ["logs", "api"],
-  ),
-  post(
-    9,
-    "Ad-safe until the comments arrive",
-    authors[0],
-    uploadImage("ad-safe-comments", "square"),
-    133,
-    27,
-    18,
-    ["ads", "comments"],
-  ),
-  post(
-    10,
-    "Ship the MVP, keep the chaos contained",
-    authors[1],
-    giphyMedia("3o7aD2saalBwwftBIY", "mvp"),
-    630,
-    75,
-    20,
-    ["mvp", "launch"],
-  ),
-  post(
-    11,
-    "When the moderation queue opens at 9am",
-    authors[2],
-    uploadImage("moderation-queue", "landscape"),
-    74,
-    8,
-    23,
-    ["moderation"],
-  ),
-  post(
-    12,
-    "A tiny thumbnail doing iframe prevention work",
-    authors[3],
-    youtubeMedia("aqz-KE-bpKQ", "video", "landscape"),
-    311,
-    23,
-    26,
-    ["youtube", "performance"],
-  ),
-  post(
-    13,
-    "The title says meme, the database says post",
-    authors[0],
-    uploadImage("post-not-meme", "square"),
-    202,
-    15,
-    30,
-    ["domain", "naming"],
-  ),
-  post(
-    14,
-    "One-level replies keeping the peace",
-    authors[1],
-    giphyMedia("26ufdipQqU2lhNA4g", "comments"),
-    145,
-    34,
-    34,
-    ["comments"],
-  ),
-  post(
-    15,
-    "The feed after three more scrolls",
-    authors[2],
-    uploadImage("three-scrolls", "portrait"),
-    404,
-    28,
-    38,
-    ["feed", "scroll"],
-  ),
-  post(
-    16,
-    "Rate limits entering the chat",
-    authors[3],
-    uploadImage("rate-limit-chat", "landscape"),
-    118,
-    6,
-    42,
-    ["security"],
-  ),
-  post(
-    17,
-    "The hot score doing public math",
-    authors[0],
-    youtubeMedia("ysz5S6PUM-U", "video", "landscape"),
-    266,
-    17,
-    48,
-    ["ranking"],
-  ),
-  post(
-    18,
-    "Anonymous users reading everything first",
-    authors[1],
-    uploadImage("anonymous-reader", "square"),
-    92,
-    11,
-    55,
-    ["auth"],
-  ),
-  post(
-    19,
-    "A GIF picker with decision fatigue",
-    authors[2],
-    giphyMedia("l0HlQ7LRalQqdWfao", "giphy"),
-    377,
-    30,
-    60,
-    ["giphy", "upload"],
-  ),
-  post(
-    20,
-    "The report dialog was right there",
-    authors[3],
-    uploadImage("report-dialog", "portrait"),
-    169,
-    13,
-    68,
-    ["reports"],
-  ),
-  post(
-    21,
-    "The 9-post batch is a personality test",
-    authors[0],
-    uploadImage("nine-post-batch", "landscape"),
-    251,
-    20,
-    72,
-    ["pagination"],
-  ),
-  post(
-    22,
-    "When the API says validation error politely",
-    authors[1],
-    giphyMedia("5VKbvrjxpVJCM", "validation"),
-    189,
-    24,
-    80,
-    ["zod"],
-  ),
-  post(
-    23,
-    "Every profile starts as three numbers and a vibe",
-    authors[2],
-    uploadImage("profile-vibe", "square"),
-    63,
-    5,
-    90,
-    ["profile"],
-  ),
-  post(
-    24,
-    "Nothing good happens after the fourth nested reply",
-    authors[3],
-    youtubeMedia("ScMzIvxBSi4", "short", "portrait"),
-    338,
-    39,
-    96,
-    ["comments", "scope"],
-  ),
+    score: 128,
+    reactionCount: 134,
+    commentCount: 2,
+    reportCount: 0,
+    authorUsername: "lucas",
+    tags: ["programming"],
+    hoursAgo: 2,
+  },
+  {
+    key: "post-forums",
+    publicCode: "Qd8RtVn2Lp",
+    slug: "why-old-forums-felt-better-than-discord",
+    postKind: "text",
+    title: "Why old forums felt better than Discord",
+    bodyText:
+      "Threads stayed readable for years. Search worked. The lore was preserved. Change my mind.",
+    imageUrl: null,
+    youtubeUrl: null,
+    youtubeVideoId: null,
+    youtubeIsShort: false,
+    status: "published",
+    score: 92,
+    reactionCount: 96,
+    commentCount: 0,
+    reportCount: 0,
+    authorUsername: "maya",
+    tags: ["internet"],
+    hoursAgo: 5,
+  },
+  {
+    key: "post-meme",
+    publicCode: "Mw4Yb6Hc3K",
+    slug: "the-cache-invalidated-itself",
+    postKind: "external_image",
+    title: "POV: the cache invalidated itself",
+    bodyText: null,
+    imageUrl: "https://picsum.photos/seed/cache-meme/1200/800",
+    youtubeUrl: null,
+    youtubeVideoId: null,
+    youtubeIsShort: false,
+    status: "published",
+    score: 204,
+    reactionCount: 211,
+    commentCount: 0,
+    reportCount: 0,
+    authorUsername: "ren",
+    tags: ["programming", "memes"],
+    hoursAgo: 8,
+  },
+  {
+    key: "post-short",
+    publicCode: "Zp9Lk2Dn5T",
+    slug: "this-short-is-too-accurate",
+    postKind: "youtube",
+    title: "This short is too accurate",
+    bodyText: null,
+    imageUrl: null,
+    youtubeUrl: "https://www.youtube.com/shorts/jNQXAC9IVRw",
+    youtubeVideoId: "jNQXAC9IVRw",
+    youtubeIsShort: true,
+    status: "published",
+    score: 156,
+    reactionCount: 160,
+    commentCount: 0,
+    reportCount: 0,
+    authorUsername: "ana",
+    tags: ["music"],
+    hoursAgo: 12,
+  },
+  {
+    key: "post-classic",
+    publicCode: "Bf2Hn7Wq4R",
+    slug: "the-video-that-started-the-internet",
+    postKind: "youtube",
+    title: "The video that started the internet",
+    bodyText: null,
+    imageUrl: null,
+    youtubeUrl: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+    youtubeVideoId: "dQw4w9WgXcQ",
+    youtubeIsShort: false,
+    status: "published",
+    score: 77,
+    reactionCount: 80,
+    commentCount: 0,
+    reportCount: 0,
+    authorUsername: "maya",
+    tags: ["internet", "music"],
+    hoursAgo: 20,
+  },
 ];
 
-export const mockUsers: UserProfile[] = authors.map((author, index) => ({
-  ...author,
-  role: index === 3 ? "moderator" : "user",
-  status: "active",
-  bio: [
-    "Posts deploy-adjacent internet artifacts.",
-    "Collects high-signal reaction material.",
-    "Finds the exact frame where the joke lands.",
-    "Keeps the queue moving.",
-  ][index],
-  postCount: mockPosts.filter((post) => post.author.id === author.id).length,
-  commentCount: 18 + index * 7,
-  createdAt: new Date(Date.parse("2026-01-01T12:00:00.000Z") + index * 86400000).toISOString(),
-}));
+export type MockComment = {
+  key: string;
+  publicCode: string;
+  postKey: string;
+  authorUsername: string;
+  parentKey: string | null;
+  bodyText: string;
+  score: number;
+  reactionCount: number;
+  replyCount: number;
+  minutesAgo: number;
+};
 
-export const mockComments: Comment[] = [
+export const mockComments: MockComment[] = [
   {
-    id: "comment_001",
-    postId: "post_001",
-    author: authors[1],
-    parentId: null,
-    body: "The Friday timestamp is the real villain here.",
+    key: "comment-1",
+    publicCode: "c4Kd9Lm2Pq",
+    postKey: "post-friday",
+    authorUsername: "maya",
+    parentKey: null,
+    bodyText: "The Friday timestamp is the real villain here.",
     score: 42,
-    status: "published",
-    moderationStatus: "clean",
-    createdAt: "2026-06-24T10:24:00.000Z",
-    updatedAt: "2026-06-24T10:24:00.000Z",
-    replies: [
-      {
-        id: "comment_002",
-        postId: "post_001",
-        author: authors[0],
-        parentId: "comment_001",
-        body: "The deployment button should turn grey after lunch.",
-        score: 18,
-        status: "published",
-        moderationStatus: "clean",
-        createdAt: "2026-06-24T10:31:00.000Z",
-        updatedAt: "2026-06-24T10:31:00.000Z",
-        replies: [],
-      },
-    ],
+    reactionCount: 45,
+    replyCount: 1,
+    minutesAgo: 96,
   },
   {
-    id: "comment_003",
-    postId: "post_001",
-    author: authors[2],
-    parentId: null,
-    body: "I respect the thumbnail-only feed rule. My laptop fan does too.",
-    score: 31,
-    status: "published",
-    moderationStatus: "clean",
-    createdAt: "2026-06-24T10:42:00.000Z",
-    updatedAt: "2026-06-24T10:42:00.000Z",
-    replies: [],
+    key: "comment-2",
+    publicCode: "c7Rn3Tb8Wx",
+    postKey: "post-friday",
+    authorUsername: "lucas",
+    parentKey: "comment-1",
+    bodyText: "The deploy button should go grey after lunch.",
+    score: 18,
+    reactionCount: 19,
+    replyCount: 0,
+    minutesAgo: 89,
   },
 ];
 
-export const mockReports: Report[] = [
+export type MockReport = {
+  key: string;
+  reporterUsername: string;
+  targetType: "post" | "comment" | "user";
+  targetCode: string;
+  reason: Report["reason"];
+  details: string | null;
+  status: "open" | "dismissed" | "actioned";
+  hoursAgo: number;
+};
+
+export const mockReports: MockReport[] = [
   {
-    id: "report_001",
-    reporter: authors[0],
+    key: "report-1",
+    reporterUsername: "ana",
     targetType: "post",
-    targetId: "post_007",
+    targetCode: "Mw4Yb6Hc3K",
     reason: "misleading_title",
-    details: "Title is funny, but it does not match the media.",
+    details: "Title is funny but does not match the image.",
     status: "open",
-    createdAt: "2026-06-24T08:30:00.000Z",
-    reviewedAt: null,
-    reviewedBy: null,
+    hoursAgo: 4,
   },
 ];
 
-export const mockGifs = [
-  giphyMedia("l0MYt5jPR6QX5pnqM", "reactions"),
-  giphyMedia("xT9IgG50Fb7Mi0prBC", "cache"),
-  giphyMedia("3o7aD2saalBwwftBIY", "launch"),
-  giphyMedia("26ufdipQqU2lhNA4g", "comments"),
-  giphyMedia("5VKbvrjxpVJCM", "validation"),
-];
+// --- Public-shape helpers (used by the web client's offline fallback) ---
 
-export function calculateHotScore(score: number, createdAt: string, now = MOCK_NOW) {
-  const ageInHours = Math.max(0, (now - Date.parse(createdAt)) / 3600000);
-  return Math.log10(Math.max(score, 1)) - ageInHours / 12;
+function authorFor(username: string): Author {
+  const user = mockUsers.find((candidate) => candidate.username === username);
+  return {
+    username,
+    displayName: user?.displayName ?? username,
+    avatarUrl: user?.avatarUrl ?? avatar(username),
+  };
 }
 
-function encodeCursor(value: unknown) {
-  return btoa(JSON.stringify(value)).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
+function toFeedPost(post: MockPost): FeedPost {
+  return {
+    publicCode: post.publicCode,
+    slug: post.slug,
+    postKind: post.postKind,
+    title: post.title,
+    bodyText: post.bodyText,
+    imageUrl: post.imageUrl,
+    youtubeUrl: post.youtubeUrl,
+    youtubeVideoId: post.youtubeVideoId,
+    youtubeIsShort: post.youtubeIsShort,
+    status: post.status,
+    score: post.score,
+    reactionCount: post.reactionCount,
+    commentCount: post.commentCount,
+    author: authorFor(post.authorUsername),
+    tags: post.tags,
+    canonicalPath: canonicalPath(post.publicCode, post.slug),
+    createdAt: hoursAgo(post.hoursAgo),
+    viewerReaction: null,
+  };
+}
+
+function publishedPostsRecent(): MockPost[] {
+  return [...mockPosts]
+    .filter((post) => post.status === "published")
+    .sort((a, b) =>
+      Date.parse(hoursAgo(a.hoursAgo)) === Date.parse(hoursAgo(b.hoursAgo))
+        ? b.publicCode.localeCompare(a.publicCode)
+        : Date.parse(hoursAgo(b.hoursAgo)) - Date.parse(hoursAgo(a.hoursAgo))
+    );
+}
+
+function encodeCursor(value: { createdAt: string; id: string }): string {
+  return btoa(JSON.stringify(value)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
 function decodeCursor(cursor: string | undefined) {
-  if (!cursor) {
-    return null;
-  }
-
+  if (!cursor) return null;
   try {
-    const normalized = cursor.replaceAll("-", "+").replaceAll("_", "/");
-    const parsed = JSON.parse(atob(normalized));
-    return FeedCursorSchema.parse(parsed);
+    const normalized = cursor.replace(/-/g, "+").replace(/_/g, "/");
+    return RecentCursorSchema.parse(JSON.parse(atob(normalized)));
   } catch {
     return null;
   }
 }
 
-export function getSortedMockPosts(sort: FeedSort) {
-  const posts = [...mockPosts];
-
-  if (sort === "recent") {
-    return posts.sort((a, b) =>
-      Date.parse(b.createdAt) - Date.parse(a.createdAt) || b.id.localeCompare(a.id)
-    );
-  }
-
-  if (sort === "top") {
-    return posts.sort((a, b) => b.score - a.score || b.id.localeCompare(a.id));
-  }
-
-  return posts.sort((a, b) =>
-    calculateHotScore(b.score, b.createdAt) - calculateHotScore(a.score, a.createdAt) ||
-    b.id.localeCompare(a.id)
-  );
-}
-
-export function getMockFeed(
-  options: { limit: number; cursor?: string; sort: FeedSort },
-): FeedResponse {
+export function getMockFeed(options: { limit: number; cursor?: string }): FeedResponse {
+  const sorted = publishedPostsRecent();
   const cursor = decodeCursor(options.cursor);
-  const offset = cursor?.sort === options.sort ? cursor.offset : 0;
-  const sorted = getSortedMockPosts(options.sort);
-  const items = sorted.slice(offset, offset + options.limit);
-  const nextOffset = offset + items.length;
-  const last = items.at(-1);
+
+  const startIndex = cursor
+    ? sorted.findIndex((post) => {
+      const createdAt = hoursAgo(post.hoursAgo);
+      return createdAt < cursor.createdAt ||
+        (createdAt === cursor.createdAt && post.publicCode < cursor.id);
+    })
+    : 0;
+  const safeStart = startIndex < 0 ? sorted.length : startIndex;
+  const page = sorted.slice(safeStart, safeStart + options.limit);
+  const items = page.map(toFeedPost);
+  const last = page[page.length - 1];
 
   return {
     items,
-    nextCursor: last && nextOffset < sorted.length
-      ? encodeCursor({
-        sort: options.sort,
-        offset: nextOffset,
-        id: last.id,
-        createdAt: last.createdAt,
-        score: last.score,
-        hotScore: calculateHotScore(last.score, last.createdAt),
-      })
+    nextCursor: last && safeStart + page.length < sorted.length
+      ? encodeCursor({ createdAt: hoursAgo(last.hoursAgo), id: last.publicCode })
       : null,
   };
 }
 
-export function getMockPostById(id: string) {
-  return mockPosts.find((post) => post.id === id) ?? null;
+export function getMockPostByCode(publicCode: string): PostDetail | null {
+  const post = mockPosts.find((candidate) => candidate.publicCode === publicCode);
+  return post ? toFeedPost(post) : null;
 }
 
-export function getMockCommentsForPost(postId: string) {
-  if (postId === "post_001") {
-    return mockComments;
-  }
+export function getMockCommentsForPost(publicCode: string): Comment[] {
+  const post = mockPosts.find((candidate) => candidate.publicCode === publicCode);
+  if (!post) return [];
 
-  const post = getMockPostById(postId);
-  if (!post) {
-    return [];
-  }
+  const forPost = mockComments.filter((comment) => comment.postKey === post.key);
+  const topLevel = forPost.filter((comment) => comment.parentKey === null);
 
-  return [
-    {
-      ...mockComments[0],
-      id: `comment_${postId}_001`,
-      postId,
-      body: `This is exactly why "${post.title}" needed its own thread.`,
-      replies: [],
-    },
-    {
-      ...mockComments[1],
-      id: `comment_${postId}_002`,
-      postId,
-      parentId: null,
-      body: "One-level replies are enough for this kind of chaos.",
-      replies: [],
-    },
-  ];
+  return topLevel.map((comment) => ({
+    publicCode: comment.publicCode,
+    author: authorFor(comment.authorUsername),
+    parentCommentCode: null,
+    bodyText: comment.bodyText,
+    score: comment.score,
+    reactionCount: comment.reactionCount,
+    replyCount: comment.replyCount,
+    status: "published" as const,
+    createdAt: new Date(MOCK_NOW - comment.minutesAgo * 60 * 1000).toISOString(),
+    viewerReaction: null,
+    replies: forPost
+      .filter((reply) => reply.parentKey === comment.key)
+      .map((reply) => ({
+        publicCode: reply.publicCode,
+        author: authorFor(reply.authorUsername),
+        parentCommentCode: comment.publicCode,
+        bodyText: reply.bodyText,
+        score: reply.score,
+        reactionCount: reply.reactionCount,
+        replyCount: 0,
+        status: "published" as const,
+        createdAt: new Date(MOCK_NOW - reply.minutesAgo * 60 * 1000).toISOString(),
+        viewerReaction: null,
+        replies: [] as [],
+      })),
+  }));
 }
 
-export function getMockUserByUsername(username: string) {
-  return mockUsers.find((user) => user.username === username) ?? null;
+export function getMockUserByUsername(username: string): UserProfile | null {
+  const user = mockUsers.find((candidate) => candidate.username === username);
+  if (!user) return null;
+
+  return {
+    username: user.username,
+    displayName: user.displayName,
+    avatarUrl: user.avatarUrl,
+    role: user.role,
+    status: user.status,
+    postCount: mockPosts.filter((post) => post.authorUsername === username).length,
+    commentCount: mockComments.filter((comment) => comment.authorUsername === username).length,
+    createdAt: new Date(MOCK_EPOCH + user.createdAtHoursOffset * 86400000).toISOString(),
+  };
+}
+
+export function getMockUserPosts(username: string): FeedResponse {
+  return {
+    items: publishedPostsRecent()
+      .filter((post) => post.authorUsername === username)
+      .map(toFeedPost),
+    nextCursor: null,
+  };
 }

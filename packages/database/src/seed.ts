@@ -1,5 +1,11 @@
-import { mockComments, mockPosts, mockReports, mockUsers } from "@doomscrollr/shared/mock-data.ts";
-import type { MediaAsset } from "@doomscrollr/shared/types.ts";
+import {
+  mockComments,
+  mockPosts,
+  mockReports,
+  mockTags,
+  mockUsers,
+} from "@doomscrollr/shared/mock-data.ts";
+import { generateId } from "@doomscrollr/shared/lib/ids.ts";
 import postgres from "postgres";
 
 const databaseUrl = Deno.env.get("DATABASE_URL");
@@ -8,252 +14,163 @@ if (!databaseUrl) {
   throw new Error("DATABASE_URL is required to seed the database.");
 }
 
-const sql = postgres(databaseUrl, { max: 1 });
+const MOCK_NOW = Date.parse("2026-06-24T12:00:00.000Z");
+const MOCK_EPOCH = Date.parse("2026-01-01T12:00:00.000Z");
 
-function uniqueMediaAssets() {
-  const mediaAssets = new Map<string, MediaAsset>();
-  for (const post of mockPosts) {
-    mediaAssets.set(post.media.id, post.media);
-  }
-  return [...mediaAssets.values()];
+function hoursAgoIso(hours: number): string {
+  return new Date(MOCK_NOW - hours * 60 * 60 * 1000).toISOString();
 }
 
-function uniqueTags() {
-  return [...new Set(mockPosts.flatMap((post) => post.tags))].sort();
+function minutesAgoIso(minutes: number): string {
+  return new Date(MOCK_NOW - minutes * 60 * 1000).toISOString();
+}
+
+const sql = postgres(databaseUrl, { max: 1 });
+
+const userIdByUsername = new Map(mockUsers.map((user) => [user.username, generateId()]));
+const tagIdBySlug = new Map(mockTags.map((tag) => [tag.slug, generateId()]));
+const postIdByKey = new Map(mockPosts.map((post) => [post.key, generateId()]));
+const postIdByPublicCode = new Map(mockPosts.map((post) => [post.publicCode, postIdByKey.get(post.key)!]));
+const commentIdByKey = new Map(mockComments.map((comment) => [comment.key, generateId()]));
+const commentIdByPublicCode = new Map(
+  mockComments.map((comment) => [comment.publicCode, commentIdByKey.get(comment.key)!]),
+);
+
+function tagPostCount(slug: string): number {
+  return mockPosts.filter((post) => post.status === "published" && post.tags.includes(slug)).length;
+}
+
+function resolveTargetId(report: (typeof mockReports)[number]): string {
+  if (report.targetType === "post") return postIdByPublicCode.get(report.targetCode)!;
+  if (report.targetType === "comment") return commentIdByPublicCode.get(report.targetCode)!;
+  return userIdByUsername.get(report.targetCode)!;
 }
 
 try {
-  await sql.begin(async (transaction) => {
+  await sql.begin(async (tx) => {
     for (const user of mockUsers) {
-      await transaction`
-        INSERT INTO users (
-          id,
-          clerk_user_id,
-          username,
-          display_name,
-          avatar_url,
-          role,
-          status,
-          created_at,
-          updated_at
-        )
+      await tx`
+        INSERT INTO users (id, clerk_user_id, username, display_name, avatar_url, role, status, created_at, updated_at)
         VALUES (
-          ${user.id},
+          ${userIdByUsername.get(user.username)!},
           ${`clerk_mock_${user.username}`},
           ${user.username},
           ${user.displayName},
           ${user.avatarUrl},
           ${user.role},
           ${user.status},
-          ${user.createdAt},
-          ${user.createdAt}
-        )
-        ON CONFLICT (id) DO UPDATE SET
-          username = EXCLUDED.username,
-          display_name = EXCLUDED.display_name,
-          avatar_url = EXCLUDED.avatar_url,
-          role = EXCLUDED.role,
-          status = EXCLUDED.status,
-          updated_at = now()
-      `;
-    }
-
-    for (const media of uniqueMediaAssets()) {
-      await transaction`
-        INSERT INTO media_assets (
-          id,
-          provider,
-          media_type,
-          provider_media_id,
-          original_url,
-          embed_url,
-          thumbnail_url,
-          preview_url,
-          width,
-          height,
-          duration_seconds,
-          aspect_ratio,
-          attribution_label,
-          attribution_url,
-          metadata_json,
-          status,
-          created_at
-        )
-        VALUES (
-          ${media.id},
-          ${media.provider},
-          ${media.mediaType},
-          ${media.providerMediaId},
-          ${media.originalUrl},
-          ${media.embedUrl},
-          ${media.thumbnailUrl},
-          ${media.previewUrl},
-          ${media.width},
-          ${media.height},
-          ${media.durationSeconds},
-          ${media.aspectRatio},
-          ${media.attributionLabel},
-          ${media.attributionUrl},
-          ${JSON.stringify({ seeded: true })},
-          ${media.status},
+          ${new Date(MOCK_EPOCH + user.createdAtHoursOffset * 86400000).toISOString()},
           now()
         )
-        ON CONFLICT (id) DO UPDATE SET
-          provider = EXCLUDED.provider,
-          media_type = EXCLUDED.media_type,
-          provider_media_id = EXCLUDED.provider_media_id,
-          original_url = EXCLUDED.original_url,
-          embed_url = EXCLUDED.embed_url,
-          thumbnail_url = EXCLUDED.thumbnail_url,
-          preview_url = EXCLUDED.preview_url,
-          width = EXCLUDED.width,
-          height = EXCLUDED.height,
-          duration_seconds = EXCLUDED.duration_seconds,
-          aspect_ratio = EXCLUDED.aspect_ratio,
-          attribution_label = EXCLUDED.attribution_label,
-          attribution_url = EXCLUDED.attribution_url,
-          metadata_json = EXCLUDED.metadata_json,
-          status = EXCLUDED.status
       `;
     }
 
-    for (const tag of uniqueTags()) {
-      await transaction`
-        INSERT INTO tags (id, name)
-        VALUES (${`tag_${tag}`}, ${tag})
-        ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name
+    for (const tag of mockTags) {
+      await tx`
+        INSERT INTO tags (id, slug, display_name, description, status, post_count, created_at, updated_at)
+        VALUES (
+          ${tagIdBySlug.get(tag.slug)!},
+          ${tag.slug},
+          ${tag.displayName},
+          ${tag.description},
+          ${"active"},
+          ${tagPostCount(tag.slug)},
+          now(),
+          now()
+        )
       `;
     }
 
     for (const post of mockPosts) {
-      await transaction`
+      const createdAt = hoursAgoIso(post.hoursAgo);
+      await tx`
         INSERT INTO posts (
-          id,
-          author_id,
-          media_asset_id,
-          title,
-          slug,
-          score,
-          upvote_count,
-          downvote_count,
-          comment_count,
-          status,
-          monetization_status,
-          ad_safety_score,
-          created_at,
-          updated_at
+          id, public_code, author_id, post_kind, title, slug,
+          body_text, image_url, youtube_url, youtube_video_id, youtube_is_short,
+          status, score, reaction_count, comment_count, report_count, created_at, updated_at
         )
         VALUES (
-          ${post.id},
-          ${post.author.id},
-          ${post.media.id},
+          ${postIdByKey.get(post.key)!},
+          ${post.publicCode},
+          ${userIdByUsername.get(post.authorUsername)!},
+          ${post.postKind},
           ${post.title},
           ${post.slug},
-          ${post.score},
-          ${post.upvoteCount},
-          ${post.downvoteCount},
-          ${post.commentCount},
+          ${post.bodyText},
+          ${post.imageUrl},
+          ${post.youtubeUrl},
+          ${post.youtubeVideoId},
+          ${post.youtubeIsShort},
           ${post.status},
-          ${post.monetizationStatus},
-          ${post.adSafetyScore},
-          ${post.createdAt},
-          ${post.updatedAt}
+          ${post.score},
+          ${post.reactionCount},
+          ${post.commentCount},
+          ${post.reportCount},
+          ${createdAt},
+          ${createdAt}
         )
-        ON CONFLICT (id) DO UPDATE SET
-          title = EXCLUDED.title,
-          slug = EXCLUDED.slug,
-          score = EXCLUDED.score,
-          upvote_count = EXCLUDED.upvote_count,
-          downvote_count = EXCLUDED.downvote_count,
-          comment_count = EXCLUDED.comment_count,
-          status = EXCLUDED.status,
-          monetization_status = EXCLUDED.monetization_status,
-          ad_safety_score = EXCLUDED.ad_safety_score,
-          updated_at = EXCLUDED.updated_at
       `;
 
-      for (const tag of post.tags) {
-        await transaction`
-          INSERT INTO post_tags (id, post_id, tag_id)
-          VALUES (${`${post.id}_${tag}`}, ${post.id}, ${`tag_${tag}`})
-          ON CONFLICT (id) DO NOTHING
+      for (const slug of post.tags) {
+        await tx`
+          INSERT INTO post_tags (post_id, tag_id, created_at)
+          VALUES (${postIdByKey.get(post.key)!}, ${tagIdBySlug.get(slug)!}, ${createdAt})
         `;
       }
     }
 
-    for (const comment of mockComments.flatMap((comment) => [comment, ...comment.replies])) {
-      await transaction`
+    // Insert top-level comments before replies so parent references exist.
+    const orderedComments = [...mockComments].sort((a, b) =>
+      (a.parentKey === null ? 0 : 1) - (b.parentKey === null ? 0 : 1)
+    );
+    for (const comment of orderedComments) {
+      const createdAt = minutesAgoIso(comment.minutesAgo);
+      await tx`
         INSERT INTO comments (
-          id,
-          post_id,
-          author_id,
-          parent_id,
-          body,
-          score,
-          status,
-          moderation_status,
-          created_at,
-          updated_at
+          id, public_code, post_id, author_id, parent_comment_id,
+          body_text, status, score, reaction_count, reply_count, created_at, updated_at
         )
         VALUES (
-          ${comment.id},
-          ${comment.postId},
-          ${comment.author.id},
-          ${comment.parentId},
-          ${comment.body},
+          ${commentIdByKey.get(comment.key)!},
+          ${comment.publicCode},
+          ${postIdByKey.get(comment.postKey)!},
+          ${userIdByUsername.get(comment.authorUsername)!},
+          ${comment.parentKey ? commentIdByKey.get(comment.parentKey)! : null},
+          ${comment.bodyText},
+          ${"published"},
           ${comment.score},
-          ${comment.status},
-          ${comment.moderationStatus},
-          ${comment.createdAt},
-          ${comment.updatedAt}
+          ${comment.reactionCount},
+          ${comment.replyCount},
+          ${createdAt},
+          ${createdAt}
         )
-        ON CONFLICT (id) DO UPDATE SET
-          body = EXCLUDED.body,
-          score = EXCLUDED.score,
-          status = EXCLUDED.status,
-          moderation_status = EXCLUDED.moderation_status,
-          updated_at = EXCLUDED.updated_at
       `;
     }
 
     for (const report of mockReports) {
-      await transaction`
+      const createdAt = hoursAgoIso(report.hoursAgo);
+      await tx`
         INSERT INTO reports (
-          id,
-          reporter_id,
-          target_type,
-          target_id,
-          reason,
-          details,
-          status,
-          created_at,
-          reviewed_at,
-          reviewed_by
+          id, reporter_user_id, target_type, target_id, reason, details, status, created_at, updated_at
         )
         VALUES (
-          ${report.id},
-          ${report.reporter.id},
+          ${generateId()},
+          ${userIdByUsername.get(report.reporterUsername)!},
           ${report.targetType},
-          ${report.targetId},
+          ${resolveTargetId(report)},
           ${report.reason},
           ${report.details},
           ${report.status},
-          ${report.createdAt},
-          ${report.reviewedAt},
-          ${report.reviewedBy?.id ?? null}
+          ${createdAt},
+          ${createdAt}
         )
-        ON CONFLICT (id) DO UPDATE SET
-          reason = EXCLUDED.reason,
-          details = EXCLUDED.details,
-          status = EXCLUDED.status,
-          reviewed_at = EXCLUDED.reviewed_at,
-          reviewed_by = EXCLUDED.reviewed_by
       `;
     }
   });
 
   console.log(
-    `Seeded ${mockUsers.length} users, ${mockPosts.length} posts, and ${mockReports.length} reports.`,
+    `Seeded ${mockUsers.length} users, ${mockTags.length} tags, ${mockPosts.length} posts, ` +
+      `${mockComments.length} comments, and ${mockReports.length} reports.`,
   );
 } finally {
   await sql.end();

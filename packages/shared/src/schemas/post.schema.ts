@@ -1,60 +1,94 @@
 import { z } from "zod";
-import { DEFAULT_FEED_LIMIT, MAX_FEED_LIMIT } from "../constants.ts";
-import { CreatePostSourceSchema, MediaAssetSchema } from "./media.schema.ts";
+import {
+  DEFAULT_FEED_LIMIT,
+  MAX_FEED_LIMIT,
+  MAX_TAGS_PER_POST,
+  POST_BODY_MAX_LENGTH,
+  TAG_SLUG_REGEX,
+  TITLE_MAX_LENGTH,
+  TITLE_MIN_LENGTH,
+} from "../constants.ts";
 import { AuthorSchema } from "./user.schema.ts";
 
-export const FeedSortSchema = z.enum(["hot", "recent", "top"]);
+// v1 supports exactly three post kinds. No uploads, no GIF providers (spec §2, §8.2).
+export const PostKindSchema = z.enum(["text", "external_image", "youtube"]);
 
-export const CreatePostSchema = z.object({
-  title: z.string().trim().min(3).max(160),
-  source: CreatePostSourceSchema,
-  tags: z.array(
-    z.string().min(1).max(32).regex(/^[a-zA-Z0-9_-]+$/),
-  ).max(8).default([]),
-});
+// Posts are either published (SFW and allowed) or removed (spec §3, §8.2).
+export const PostStatusSchema = z.enum(["published", "removed"]);
 
-export const PostFeedQuerySchema = z.object({
+export const ReactionValueSchema = z.union([z.literal(1), z.literal(-1)]);
+
+const TitleSchema = z.string().trim().min(TITLE_MIN_LENGTH).max(TITLE_MAX_LENGTH);
+
+const TagsSchema = z
+  .array(z.string().regex(TAG_SLUG_REGEX))
+  .max(MAX_TAGS_PER_POST)
+  .default([]);
+
+// Create-post payloads, discriminated by kind (spec §12).
+export const CreatePostSchema = z.discriminatedUnion("postKind", [
+  z.object({
+    postKind: z.literal("text"),
+    title: TitleSchema,
+    bodyText: z.string().trim().min(1).max(POST_BODY_MAX_LENGTH),
+    tags: TagsSchema,
+  }),
+  z.object({
+    postKind: z.literal("external_image"),
+    title: TitleSchema,
+    imageUrl: z.string().url(),
+    tags: TagsSchema,
+  }),
+  z.object({
+    postKind: z.literal("youtube"),
+    title: TitleSchema,
+    youtubeUrl: z.string().url(),
+    tags: TagsSchema,
+  }),
+]);
+
+// Public post shape. Internal ids never cross the boundary; posts are addressed
+// by publicCode + slug (spec §6, §7).
+export const FeedPostSchema = z
+  .object({
+    publicCode: z.string().min(1),
+    slug: z.string().min(1),
+    postKind: PostKindSchema,
+    title: z.string().min(1),
+    bodyText: z.string().nullable(),
+    imageUrl: z.string().url().nullable(),
+    youtubeUrl: z.string().url().nullable(),
+    youtubeVideoId: z.string().nullable(),
+    youtubeIsShort: z.boolean(),
+    status: PostStatusSchema,
+    score: z.number().int(),
+    reactionCount: z.number().int().nonnegative(),
+    commentCount: z.number().int().nonnegative(),
+    author: AuthorSchema,
+    tags: z.array(z.string()),
+    canonicalPath: z.string().min(1),
+    createdAt: z.string().datetime(),
+    viewerReaction: ReactionValueSchema.nullable(),
+  })
+  .strict();
+
+export const PostDetailSchema = FeedPostSchema;
+
+export const RecentFeedQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(MAX_FEED_LIMIT).default(DEFAULT_FEED_LIMIT),
   cursor: z.string().optional(),
-  sort: FeedSortSchema.default("hot"),
 });
 
-export const FeedPostSchema = z.object({
-  id: z.string().min(1),
-  title: z.string().min(1),
-  slug: z.string().min(1),
-  score: z.number().int(),
-  upvoteCount: z.number().int().nonnegative(),
-  downvoteCount: z.number().int().nonnegative(),
-  commentCount: z.number().int().nonnegative(),
-  status: z.enum(["published", "hidden", "removed", "pending_review"]),
-  monetizationStatus: z.enum(["enabled", "disabled", "pending_review", "unsafe"]),
-  adSafetyScore: z.number().min(0).max(1),
-  createdAt: z.string().datetime(),
-  updatedAt: z.string().datetime(),
-  author: AuthorSchema,
-  media: MediaAssetSchema,
-  tags: z.array(z.string()),
-});
+export const FeedResponseSchema = z
+  .object({
+    items: z.array(FeedPostSchema),
+    nextCursor: z.string().nullable(),
+  })
+  .strict();
 
-export const FeedAdItemSchema = z.object({
-  type: z.literal("ad"),
-  placement: z.literal("feed_inline"),
-  slot: z.string().min(1),
-});
-
-export const FeedPostItemSchema = z.object({
-  type: z.literal("post"),
-  post: FeedPostSchema,
-});
-
-export const FeedItemSchema = z.discriminatedUnion("type", [FeedPostItemSchema, FeedAdItemSchema]);
-
-export const FeedResponseSchema = z.object({
-  items: z.array(FeedPostSchema),
-  nextCursor: z.string().nullable(),
-});
-
-export const PostDetailSchema = FeedPostSchema.extend({
-  body: z.string().max(2000).nullable(),
-});
+export const CreatePostResponseSchema = z
+  .object({
+    post: PostDetailSchema,
+    canonicalUrl: z.string().url(),
+  })
+  .strict();

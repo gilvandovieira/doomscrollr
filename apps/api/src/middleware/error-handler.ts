@@ -28,10 +28,11 @@ export function errorHandler(error: Error, c: Context) {
   }, 500);
 }
 
-function toContentfulStatus(status: number) {
-  if (status === 400 || status === 401 || status === 404 || status === 501) {
-    return status;
-  }
+type KnownStatus = 400 | 401 | 403 | 404 | 409 | 422 | 429 | 500 | 501;
 
-  return 500;
+const PASSTHROUGH_STATUSES = new Set<number>([400, 401, 403, 404, 409, 422, 429, 501]);
+
+function toContentfulStatus(status: number): KnownStatus {
+  // Pass through known client-error statuses and 501; everything else is a 500.
+  return (PASSTHROUGH_STATUSES.has(status) ? status : 500) as KnownStatus;
 }

@@ -1,153 +1,184 @@
-CREATE TYPE user_role AS ENUM ('user', 'moderator', 'admin');
-CREATE TYPE user_status AS ENUM ('active', 'restricted', 'banned');
-CREATE TYPE media_provider AS ENUM ('upload', 'youtube', 'giphy', 'tenor');
-CREATE TYPE media_type AS ENUM ('image', 'gif', 'video', 'short');
-CREATE TYPE media_status AS ENUM ('ready', 'pending_review', 'blocked');
-CREATE TYPE aspect_ratio AS ENUM ('square', 'landscape', 'portrait', 'unknown');
-CREATE TYPE content_status AS ENUM ('published', 'hidden', 'removed', 'pending_review');
-CREATE TYPE monetization_status AS ENUM ('enabled', 'disabled', 'pending_review', 'unsafe');
-CREATE TYPE report_status AS ENUM ('open', 'dismissed', 'actioned');
+-- Doomscrollr v1 schema (spec §8 + §10.2).
+-- SFW-only validation product: text / external image / YouTube posts, recent feed,
+-- comments, reactions, reports, blocking, curated tags, and funnel events.
+
+CREATE TYPE user_role AS ENUM ('user', 'admin');
+CREATE TYPE user_status AS ENUM ('active', 'limited', 'suspended', 'banned');
+CREATE TYPE post_kind AS ENUM ('text', 'external_image', 'youtube');
+CREATE TYPE post_status AS ENUM ('published', 'removed');
+CREATE TYPE comment_status AS ENUM ('published', 'removed');
 CREATE TYPE report_target_type AS ENUM ('post', 'comment', 'user');
+CREATE TYPE report_status AS ENUM ('open', 'dismissed', 'actioned');
 
 CREATE TABLE users (
-  id text PRIMARY KEY,
-  clerk_user_id text NOT NULL,
-  username text NOT NULL,
-  display_name text NOT NULL,
+  id uuid PRIMARY KEY,
+  clerk_user_id text NOT NULL UNIQUE,
+  username text NOT NULL UNIQUE,
+  display_name text,
   avatar_url text,
   role user_role NOT NULL DEFAULT 'user',
   status user_status NOT NULL DEFAULT 'active',
   created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now()
-);
-
-CREATE UNIQUE INDEX users_clerk_user_id_unique ON users (clerk_user_id);
-CREATE UNIQUE INDEX users_username_unique ON users (username);
-
-CREATE TABLE media_assets (
-  id text PRIMARY KEY,
-  provider media_provider NOT NULL,
-  media_type media_type NOT NULL,
-  provider_media_id text,
-  original_url text,
-  embed_url text,
-  thumbnail_url text NOT NULL,
-  preview_url text,
-  width integer,
-  height integer,
-  duration_seconds integer,
-  aspect_ratio aspect_ratio NOT NULL DEFAULT 'unknown',
-  attribution_label text,
-  attribution_url text,
-  metadata_json jsonb,
-  status media_status NOT NULL DEFAULT 'pending_review',
-  created_at timestamptz NOT NULL DEFAULT now()
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  CHECK (username ~ '^[a-z0-9_]{3,24}$')
 );
 
 CREATE TABLE posts (
-  id text PRIMARY KEY,
-  author_id text NOT NULL REFERENCES users (id),
-  media_asset_id text NOT NULL REFERENCES media_assets (id),
+  id uuid PRIMARY KEY,
+  public_code text NOT NULL UNIQUE,
+  author_id uuid NOT NULL REFERENCES users (id),
+  post_kind post_kind NOT NULL,
   title text NOT NULL,
   slug text NOT NULL,
+  body_text text,
+  image_url text,
+  youtube_url text,
+  youtube_video_id text,
+  youtube_is_short boolean NOT NULL DEFAULT false,
+  status post_status NOT NULL DEFAULT 'published',
+  removal_reason text,
+  removed_by_user_id uuid REFERENCES users (id),
+  removed_at timestamptz,
   score integer NOT NULL DEFAULT 0,
-  upvote_count integer NOT NULL DEFAULT 0,
-  downvote_count integer NOT NULL DEFAULT 0,
+  reaction_count integer NOT NULL DEFAULT 0,
   comment_count integer NOT NULL DEFAULT 0,
-  status content_status NOT NULL DEFAULT 'published',
-  monetization_status monetization_status NOT NULL DEFAULT 'pending_review',
-  ad_safety_score real NOT NULL DEFAULT 0,
+  report_count integer NOT NULL DEFAULT 0,
   created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now()
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  CHECK (length(trim(title)) BETWEEN 3 AND 180),
+  CHECK (
+    (
+      post_kind = 'text'
+      AND body_text IS NOT NULL
+      AND length(trim(body_text)) > 0
+      AND image_url IS NULL
+      AND youtube_url IS NULL
+      AND youtube_video_id IS NULL
+    )
+    OR (
+      post_kind = 'external_image'
+      AND body_text IS NULL
+      AND image_url IS NOT NULL
+      AND youtube_url IS NULL
+      AND youtube_video_id IS NULL
+    )
+    OR (
+      post_kind = 'youtube'
+      AND body_text IS NULL
+      AND youtube_url IS NOT NULL
+      AND youtube_video_id IS NOT NULL
+      AND image_url IS NULL
+    )
+  )
 );
 
-CREATE INDEX posts_created_at_idx ON posts (created_at);
-CREATE INDEX posts_score_idx ON posts (score);
-CREATE INDEX posts_status_idx ON posts (status);
-CREATE INDEX posts_monetization_status_idx ON posts (monetization_status);
+CREATE INDEX posts_recent_idx
+  ON posts (created_at DESC, id DESC)
+  WHERE status = 'published';
+
+CREATE INDEX posts_author_recent_idx
+  ON posts (author_id, created_at DESC, id DESC)
+  WHERE status = 'published';
 
 CREATE TABLE comments (
-  id text PRIMARY KEY,
-  post_id text NOT NULL REFERENCES posts (id),
-  author_id text NOT NULL REFERENCES users (id),
-  parent_id text REFERENCES comments (id),
-  body text NOT NULL,
+  id uuid PRIMARY KEY,
+  public_code text NOT NULL UNIQUE,
+  post_id uuid NOT NULL REFERENCES posts (id) ON DELETE CASCADE,
+  author_id uuid NOT NULL REFERENCES users (id),
+  parent_comment_id uuid REFERENCES comments (id),
+  body_text text NOT NULL,
+  status comment_status NOT NULL DEFAULT 'published',
   score integer NOT NULL DEFAULT 0,
-  status content_status NOT NULL DEFAULT 'published',
-  moderation_status text NOT NULL DEFAULT 'clean',
+  reaction_count integer NOT NULL DEFAULT 0,
+  reply_count integer NOT NULL DEFAULT 0,
+  removal_reason text,
+  removed_by_user_id uuid REFERENCES users (id),
+  removed_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now()
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  CHECK (length(trim(body_text)) BETWEEN 1 AND 2000)
 );
 
-CREATE INDEX comments_post_id_idx ON comments (post_id);
-CREATE INDEX comments_parent_id_idx ON comments (parent_id);
+CREATE INDEX comments_post_recent_idx
+  ON comments (post_id, created_at ASC, id ASC)
+  WHERE status = 'published';
 
-CREATE TABLE post_votes (
-  id text PRIMARY KEY,
-  user_id text NOT NULL REFERENCES users (id),
-  post_id text NOT NULL REFERENCES posts (id),
-  value integer NOT NULL,
-  created_at timestamptz NOT NULL DEFAULT now()
+CREATE INDEX comments_parent_idx
+  ON comments (parent_comment_id, created_at ASC, id ASC)
+  WHERE status = 'published';
+
+CREATE TABLE post_reactions (
+  user_id uuid NOT NULL REFERENCES users (id),
+  post_id uuid NOT NULL REFERENCES posts (id) ON DELETE CASCADE,
+  value smallint NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (user_id, post_id),
+  CHECK (value IN (-1, 1))
 );
 
-CREATE UNIQUE INDEX post_votes_user_post_unique ON post_votes (user_id, post_id);
-
-CREATE TABLE comment_votes (
-  id text PRIMARY KEY,
-  user_id text NOT NULL REFERENCES users (id),
-  comment_id text NOT NULL REFERENCES comments (id),
-  value integer NOT NULL,
-  created_at timestamptz NOT NULL DEFAULT now()
+CREATE TABLE comment_reactions (
+  user_id uuid NOT NULL REFERENCES users (id),
+  comment_id uuid NOT NULL REFERENCES comments (id) ON DELETE CASCADE,
+  value smallint NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (user_id, comment_id),
+  CHECK (value IN (-1, 1))
 );
-
-CREATE UNIQUE INDEX comment_votes_user_comment_unique ON comment_votes (user_id, comment_id);
 
 CREATE TABLE reports (
-  id text PRIMARY KEY,
-  reporter_id text NOT NULL REFERENCES users (id),
+  id uuid PRIMARY KEY,
+  reporter_user_id uuid NOT NULL REFERENCES users (id),
   target_type report_target_type NOT NULL,
-  target_id text NOT NULL,
+  target_id uuid NOT NULL,
   reason text NOT NULL,
   details text,
   status report_status NOT NULL DEFAULT 'open',
   created_at timestamptz NOT NULL DEFAULT now(),
-  reviewed_at timestamptz,
-  reviewed_by text REFERENCES users (id)
+  updated_at timestamptz NOT NULL DEFAULT now()
 );
 
 CREATE INDEX reports_status_idx ON reports (status);
 
-CREATE TABLE moderation_actions (
-  id text PRIMARY KEY,
-  moderator_id text NOT NULL REFERENCES users (id),
-  target_type report_target_type NOT NULL,
-  target_id text NOT NULL,
-  action text NOT NULL,
-  reason text,
-  metadata_json jsonb,
-  created_at timestamptz NOT NULL DEFAULT now()
+CREATE TABLE user_blocks (
+  blocker_user_id uuid NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  blocked_user_id uuid NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (blocker_user_id, blocked_user_id),
+  CHECK (blocker_user_id <> blocked_user_id)
 );
 
 CREATE TABLE tags (
-  id text PRIMARY KEY,
-  name text NOT NULL
+  id uuid PRIMARY KEY,
+  slug text NOT NULL UNIQUE,
+  display_name text NOT NULL,
+  description text,
+  status text NOT NULL DEFAULT 'active',
+  post_count integer NOT NULL DEFAULT 0,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  CHECK (slug ~ '^[a-z0-9-]{2,32}$')
 );
-
-CREATE UNIQUE INDEX tags_name_unique ON tags (name);
 
 CREATE TABLE post_tags (
-  id text PRIMARY KEY,
-  post_id text NOT NULL REFERENCES posts (id),
-  tag_id text NOT NULL REFERENCES tags (id)
+  post_id uuid NOT NULL REFERENCES posts (id) ON DELETE CASCADE,
+  tag_id uuid NOT NULL REFERENCES tags (id) ON DELETE CASCADE,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (post_id, tag_id)
 );
 
-CREATE UNIQUE INDEX post_tags_post_tag_unique ON post_tags (post_id, tag_id);
-
-CREATE TABLE saved_posts (
-  id text PRIMARY KEY,
-  user_id text NOT NULL REFERENCES users (id),
-  post_id text NOT NULL REFERENCES posts (id),
+CREATE TABLE post_events (
+  id uuid PRIMARY KEY,
+  post_id uuid NOT NULL REFERENCES posts (id) ON DELETE CASCADE,
+  actor_user_id uuid REFERENCES users (id),
+  anon_session_id text,
+  event_type text NOT NULL,
+  metadata jsonb,
   created_at timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE UNIQUE INDEX saved_posts_user_post_unique ON saved_posts (user_id, post_id);
+CREATE INDEX post_events_post_idx ON post_events (post_id, created_at DESC);
+CREATE INDEX post_events_anon_idx
+  ON post_events (anon_session_id, created_at DESC)
+  WHERE anon_session_id IS NOT NULL;

@@ -1,24 +1,28 @@
-import { CreateCommentSchema } from "@doomscrollr/shared/schemas/comment.schema.ts";
+import { SetReactionSchema } from "@doomscrollr/shared/schemas/reaction.schema.ts";
 import { Hono } from "hono";
-import { notImplemented } from "../lib/errors.ts";
+import { notFound } from "../lib/errors.ts";
+import { enforceRateLimit, RATE_LIMITS } from "../lib/rate-limit.ts";
 import { parseOrThrow, readJsonBody } from "../lib/validation.ts";
-import { requireAuth } from "../middleware/auth.ts";
+import { getAuthUser, requireUser } from "../middleware/auth.ts";
+import { getCommentRefByCode } from "../repositories/comments.repository.ts";
+import { recordPostEvent } from "../repositories/events.repository.ts";
+import { setCommentReaction } from "../repositories/reactions.repository.ts";
 
 export const commentsRoutes = new Hono();
 
-commentsRoutes.post("/:id/replies", requireAuth, async (c) => {
-  parseOrThrow(CreateCommentSchema, await readJsonBody(c));
-  throw notImplemented("Comment replies will be implemented with one-level parent validation.");
-});
+// POST /api/comments/:commentCode/reactions (spec §20.3).
+commentsRoutes.post("/:commentCode/reactions", requireUser, async (c) => {
+  const user = getAuthUser(c);
+  enforceRateLimit(`react:${user.id}`, RATE_LIMITS.react);
+  const commentCode = c.req.param("commentCode");
+  const { value } = parseOrThrow(SetReactionSchema, await readJsonBody(c));
 
-commentsRoutes.post("/:id/vote", requireAuth, () => {
-  throw notImplemented(
-    "Comment voting will be implemented with database-backed uniqueness constraints.",
-  );
-});
+  const ref = await getCommentRefByCode(commentCode);
+  if (!ref) throw notFound("Comment not found.");
 
-commentsRoutes.delete("/:id", requireAuth, () => {
-  throw notImplemented(
-    "Comment deletion will be implemented with author and moderator permissions.",
-  );
+  const result = await setCommentReaction(user.id, ref.id, value);
+  if (value !== 0) {
+    await recordPostEvent({ postId: ref.postId, actorUserId: user.id, eventType: "reaction_created" });
+  }
+  return c.json(result);
 });

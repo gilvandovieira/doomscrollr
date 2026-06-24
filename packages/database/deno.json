@@ -11,6 +11,7 @@
   },
   "imports": {
     "@doomscrollr/shared/": "../shared/src/",
+    "drizzle-orm": "npm:drizzle-orm@^0.44.5",
     "drizzle-orm/pg-core": "npm:drizzle-orm@^0.44.5/pg-core",
     "postgres": "npm:postgres@^3.4.7"
   }

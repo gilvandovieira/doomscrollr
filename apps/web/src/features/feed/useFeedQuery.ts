@@ -1,17 +1,12 @@
-import type { FeedSort } from "@doomscrollr/shared/types.ts";
 import { useInfiniteQuery } from "@tanstack/react-query";
-import { fetchFeedPage } from "../../app/api.ts";
+import { fetchRecentFeed } from "../../app/api.ts";
 
-export function useFeedQuery(sort: FeedSort) {
+// Recent feed only, keyset pagination (spec §9).
+export function useRecentFeed() {
   return useInfiniteQuery({
-    queryKey: ["feed", sort],
+    queryKey: ["feed", "recent"],
     initialPageParam: undefined as string | undefined,
-    queryFn: ({ pageParam }) =>
-      fetchFeedPage({
-        sort,
-        cursor: pageParam,
-        limit: 9,
-      }),
+    queryFn: ({ pageParam }) => fetchRecentFeed({ cursor: pageParam, limit: 20 }),
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
   });
 }

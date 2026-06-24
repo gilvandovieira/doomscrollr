@@ -1,20 +1,34 @@
 import { z } from "zod";
+import { USERNAME_REGEX } from "../constants.ts";
 
-export const UserRoleSchema = z.enum(["user", "moderator", "admin"]);
-export const UserStatusSchema = z.enum(["active", "restricted", "banned"]);
+export const UserRoleSchema = z.enum(["user", "admin"]);
+export const UserStatusSchema = z.enum(["active", "limited", "suspended", "banned"]);
 
-export const AuthorSchema = z.object({
-  id: z.string().min(1),
-  username: z.string().min(3).max(32),
-  displayName: z.string().min(1).max(80),
-  avatarUrl: z.string().url(),
-});
+export const UsernameSchema = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .regex(USERNAME_REGEX, "Use 3-24 lowercase letters, numbers, or underscores.");
+
+// Public author. Internal database ids never cross the public boundary (spec §6);
+// the username is the public identity.
+export const AuthorSchema = z
+  .object({
+    username: z.string().min(3).max(24),
+    displayName: z.string().max(80).nullable(),
+    avatarUrl: z.string().url().nullable(),
+  })
+  .strict();
 
 export const UserProfileSchema = AuthorSchema.extend({
-  role: UserRoleSchema.default("user"),
-  status: UserStatusSchema.default("active"),
-  bio: z.string().max(240).default(""),
-  postCount: z.number().int().nonnegative().default(0),
-  commentCount: z.number().int().nonnegative().default(0),
+  role: UserRoleSchema,
+  status: UserStatusSchema,
+  postCount: z.number().int().nonnegative(),
+  commentCount: z.number().int().nonnegative(),
   createdAt: z.string().datetime(),
+}).strict();
+
+// Username setup flow for users without a valid local handle (spec §17, ROADMAP V1-033).
+export const SetUsernameSchema = z.object({
+  username: UsernameSchema,
 });

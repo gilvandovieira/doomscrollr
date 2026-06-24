@@ -1,15 +1,102 @@
 import { comments, posts, users } from "@doomscrollr/database/schema.ts";
-import type { UserProfile } from "@doomscrollr/shared/types.ts";
-import { eq, sql } from "drizzle-orm";
+import { generateId } from "@doomscrollr/shared/lib/ids.ts";
+import type { UserProfile, UserRole, UserStatus } from "@doomscrollr/shared/types.ts";
+import { and, eq, sql } from "drizzle-orm";
 import { db } from "../db/client.ts";
 import { toUserProfile, type UserRow } from "./transformers.ts";
 
-export async function getUserProfile(username: string): Promise<UserProfile | null> {
-  if (!db) {
-    throw new Error("Database is not configured.");
-  }
+// The authenticated local user attached to write requests.
+export type LocalUser = {
+  id: string;
+  username: string;
+  displayName: string | null;
+  avatarUrl: string | null;
+  role: UserRole;
+  status: UserStatus;
+};
 
-  const userRows = await db
+const localUserColumns = {
+  id: users.id,
+  username: users.username,
+  displayName: users.displayName,
+  avatarUrl: users.avatarUrl,
+  role: users.role,
+  status: users.status,
+};
+
+function requireDb() {
+  if (!db) throw new Error("Database is not configured.");
+  return db;
+}
+
+export async function getUserIdByClerkId(clerkUserId: string): Promise<string | null> {
+  const rows = await requireDb()
+    .select({ id: users.id })
+    .from(users)
+    .where(eq(users.clerkUserId, clerkUserId))
+    .limit(1);
+  return rows[0]?.id ?? null;
+}
+
+export async function getUserIdByUsername(username: string): Promise<string | null> {
+  const rows = await requireDb()
+    .select({ id: users.id })
+    .from(users)
+    .where(eq(users.username, username))
+    .limit(1);
+  return rows[0]?.id ?? null;
+}
+
+export async function getLocalUserByClerkId(clerkUserId: string): Promise<LocalUser | null> {
+  const rows = await requireDb()
+    .select(localUserColumns)
+    .from(users)
+    .where(eq(users.clerkUserId, clerkUserId))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+export async function isUsernameTaken(username: string): Promise<boolean> {
+  const rows = await requireDb()
+    .select({ id: users.id })
+    .from(users)
+    .where(eq(users.username, username))
+    .limit(1);
+  return rows.length > 0;
+}
+
+export async function createLocalUser(input: {
+  clerkUserId: string;
+  username: string;
+  displayName: string | null;
+  avatarUrl: string | null;
+}): Promise<LocalUser> {
+  const rows = await requireDb()
+    .insert(users)
+    .values({
+      id: generateId(),
+      clerkUserId: input.clerkUserId,
+      username: input.username,
+      displayName: input.displayName,
+      avatarUrl: input.avatarUrl,
+    })
+    .returning(localUserColumns);
+  return rows[0];
+}
+
+export async function setUsername(userId: string, username: string): Promise<LocalUser> {
+  const rows = await requireDb()
+    .update(users)
+    .set({ username, updatedAt: new Date() })
+    .where(eq(users.id, userId))
+    .returning(localUserColumns);
+  return rows[0];
+}
+
+export async function getUserProfile(username: string): Promise<UserProfile | null> {
+  const database = requireDb();
+
+  const userRows = await database
     .select({
       id: users.id,
       username: users.username,
@@ -23,19 +110,19 @@ export async function getUserProfile(username: string): Promise<UserProfile | nu
     .where(eq(users.username, username))
     .limit(1);
 
-  const user = userRows[0] as UserRow | undefined;
-  if (!user) {
-    return null;
-  }
+  const user = userRows[0] as (UserRow & { id: string }) | undefined;
+  if (!user) return null;
 
-  const postCountRows = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(posts)
-    .where(eq(posts.authorId, user.id));
-  const commentCountRows = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(comments)
-    .where(eq(comments.authorId, user.id));
+  const [postCountRows, commentCountRows] = await Promise.all([
+    database
+      .select({ count: sql<number>`count(*)::int` })
+      .from(posts)
+      .where(and(eq(posts.authorId, user.id), eq(posts.status, "published"))),
+    database
+      .select({ count: sql<number>`count(*)::int` })
+      .from(comments)
+      .where(and(eq(comments.authorId, user.id), eq(comments.status, "published"))),
+  ]);
 
   return toUserProfile(user, {
     postCount: Number(postCountRows[0]?.count ?? 0),

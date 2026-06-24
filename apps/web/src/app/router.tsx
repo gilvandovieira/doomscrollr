@@ -1,63 +1,44 @@
 import { createRootRoute, createRoute, createRouter } from "@tanstack/react-router";
 import { AppLayout } from "../components/AppLayout.tsx";
+import { AdminReportsPage } from "../features/admin/AdminReportsPage.tsx";
+import { CreatePage } from "../features/create/CreatePage.tsx";
 import { FeedPage } from "../features/feed/FeedPage.tsx";
-import { ModerationPage } from "../features/moderation/ModerationPage.tsx";
 import { PostDetailPage } from "../features/post/PostDetailPage.tsx";
 import { ProfilePage } from "../features/profile/ProfilePage.tsx";
-import { UploadPage } from "../features/upload/UploadPage.tsx";
 
-function HotFeedRoute() {
-  return <FeedPage sort="hot" />;
-}
-
-function RecentFeedRoute() {
-  return <FeedPage sort="recent" />;
-}
-
-function TopFeedRoute() {
-  return <FeedPage sort="top" />;
-}
-
-const rootRoute = createRootRoute({
-  component: AppLayout,
-});
+const rootRoute = createRootRoute({ component: AppLayout });
 
 const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/",
-  component: HotFeedRoute,
+  component: FeedPage,
 });
 
-const recentRoute = createRoute({
+const createRouteDef = createRoute({
   getParentRoute: () => rootRoute,
-  path: "/recent",
-  component: RecentFeedRoute,
+  path: "/create",
+  component: CreatePage,
 });
 
-const topRoute = createRoute({
+const adminReportsRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: "/top",
-  component: TopFeedRoute,
+  path: "/admin/reports",
+  component: AdminReportsPage,
 });
 
 const postRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: "/post/$postId",
+  path: "/p/$postCode",
   component: PostDetailPage,
 });
 
-const uploadRoute = createRoute({
+const postWithSlugRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: "/upload",
-  component: UploadPage,
+  path: "/p/$postCode/$slug",
+  component: PostDetailPage,
 });
 
-const moderationRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/moderation",
-  component: ModerationPage,
-});
-
+// Profile handles carry the leading "@" in the param value, e.g. /@lucas (spec §6.3).
 const profileRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/$username",
@@ -66,11 +47,10 @@ const profileRoute = createRoute({
 
 const routeTree = rootRoute.addChildren([
   indexRoute,
-  recentRoute,
-  topRoute,
+  createRouteDef,
+  adminReportsRoute,
   postRoute,
-  uploadRoute,
-  moderationRoute,
+  postWithSlugRoute,
   profileRoute,
 ]);
 

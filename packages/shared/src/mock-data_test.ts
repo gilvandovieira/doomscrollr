@@ -1,38 +1,30 @@
-import { getMockFeed, getSortedMockPosts } from "./mock-data.ts";
+import { getMockFeed } from "./mock-data.ts";
 
-Deno.test("mock feed returns 9 items and a cursor for the next batch", () => {
-  const firstPage = getMockFeed({ sort: "hot", limit: 9 });
-  const secondPage = getMockFeed({
-    sort: "hot",
-    limit: 9,
-    cursor: firstPage.nextCursor ?? undefined,
-  });
+Deno.test("mock recent feed paginates without overlap via keyset cursor", () => {
+  const firstPage = getMockFeed({ limit: 2 });
 
-  if (firstPage.items.length !== 9) {
-    throw new Error(`Expected 9 first-page items, received ${firstPage.items.length}.`);
+  if (firstPage.items.length !== 2) {
+    throw new Error(`Expected 2 first-page items, received ${firstPage.items.length}.`);
   }
-
   if (!firstPage.nextCursor) {
     throw new Error("Expected first page to expose a next cursor.");
   }
 
-  const firstPageIds = new Set(firstPage.items.map((post) => post.id));
-  const overlap = secondPage.items.some((post) => firstPageIds.has(post.id));
+  const secondPage = getMockFeed({ limit: 2, cursor: firstPage.nextCursor });
+  const firstCodes = new Set(firstPage.items.map((post) => post.publicCode));
+  const overlap = secondPage.items.some((post) => firstCodes.has(post.publicCode));
 
   if (overlap) {
     throw new Error("Cursor pagination returned duplicate posts across pages.");
   }
 });
 
-Deno.test("recent mock sort orders posts by created date descending", () => {
-  const recentPosts = getSortedMockPosts("recent");
+Deno.test("mock recent feed orders posts newest-first", () => {
+  const { items } = getMockFeed({ limit: 50 });
 
-  for (let index = 1; index < recentPosts.length; index += 1) {
-    const previous = Date.parse(recentPosts[index - 1].createdAt);
-    const current = Date.parse(recentPosts[index].createdAt);
-
-    if (previous < current) {
-      throw new Error("Recent sort returned an older post before a newer post.");
+  for (let index = 1; index < items.length; index += 1) {
+    if (Date.parse(items[index - 1].createdAt) < Date.parse(items[index].createdAt)) {
+      throw new Error("Recent feed returned an older post before a newer post.");
     }
   }
 });

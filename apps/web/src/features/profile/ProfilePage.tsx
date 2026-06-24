@@ -1,83 +1,109 @@
 import { useQuery } from "@tanstack/react-query";
 import { useParams } from "@tanstack/react-router";
-import { fetchUser, fetchUserPosts } from "../../app/api.ts";
+import { useState } from "react";
+import { useAccount, useAuthToken, useIsSignedIn } from "../../app/account.ts";
+import { blockUser, fetchUser, fetchUserPosts, unblockUser } from "../../app/api.ts";
 import { PostCard } from "../feed/PostCard.tsx";
 
 export function ProfilePage() {
   const params = useParams({ strict: false }) as { username?: string };
   const username = params.username ?? "";
+  const handle = username.replace(/^@/, "");
+
   const userQuery = useQuery({
-    queryKey: ["user", username],
-    queryFn: () => fetchUser(username),
+    queryKey: ["user", handle],
+    queryFn: () => fetchUser(handle),
     enabled: username.startsWith("@"),
   });
   const postsQuery = useQuery({
-    queryKey: ["user-posts", username],
-    queryFn: () => fetchUserPosts(username),
+    queryKey: ["user-posts", handle],
+    queryFn: () => fetchUserPosts(handle),
     enabled: username.startsWith("@"),
   });
 
-  if (!username.startsWith("@")) {
-    return (
-      <div className="hard-panel grid min-h-80 place-items-center bg-newsprint p-6">
-        <p className="font-mono text-sm font-black uppercase">Route not found</p>
-      </div>
-    );
-  }
-
-  if (userQuery.isLoading) {
-    return (
-      <div className="hard-panel grid min-h-80 place-items-center bg-newsprint p-6">
-        <p className="font-mono text-sm font-black uppercase">Loading profile</p>
-      </div>
-    );
-  }
-
-  if (userQuery.isError || !userQuery.data) {
-    return (
-      <div className="hard-panel grid min-h-80 place-items-center bg-newsprint p-6">
-        <p className="font-mono text-sm font-black uppercase">Profile not found</p>
-      </div>
-    );
-  }
+  if (!username.startsWith("@")) return <Shell message="Route not found" />;
+  if (userQuery.isPending) return <Shell message="Loading profile…" />;
+  if (userQuery.isError || !userQuery.data) return <Shell message="Profile not found" />;
 
   const user = userQuery.data;
   const posts = postsQuery.data?.items ?? [];
 
   return (
-    <section className="space-y-5">
-      <div className="hard-panel grid gap-4 bg-paper p-4 md:grid-cols-[120px_minmax(0,1fr)_auto] md:items-center">
+    <section className="space-y-4">
+      <div className="hard-panel grid gap-4 bg-paper p-4 sm:grid-cols-[96px_minmax(0,1fr)] sm:items-center">
         <img
-          src={user.avatarUrl}
+          src={user.avatarUrl ?? `https://api.dicebear.com/9.x/shapes/svg?seed=${user.username}`}
           alt=""
           className="h-24 w-24 border-2 border-ink bg-newsprint object-cover"
         />
         <div className="min-w-0">
           <p className="font-mono text-xs font-black uppercase text-oxide">@{user.username}</p>
-          <h1 className="truncate font-display text-5xl uppercase leading-none">
-            {user.displayName}
+          <h1 className="truncate font-display text-4xl uppercase leading-none">
+            {user.displayName ?? user.username}
           </h1>
-          <p className="mt-2 max-w-2xl text-sm font-bold leading-6">{user.bio}</p>
-        </div>
-        <div className="grid grid-cols-3 gap-2 md:w-64">
-          <ProfileStat label="posts" value={user.postCount} />
-          <ProfileStat label="comments" value={user.commentCount} />
-          <ProfileStat label="role" value={user.role} />
+          <div className="mt-2 flex flex-wrap items-center gap-3 font-mono text-xs font-black uppercase">
+            <span>{user.postCount} posts</span>
+            <span>{user.commentCount} comments</span>
+            {user.role === "admin" && <span className="text-oxide">admin</span>}
+            <BlockControl profileUsername={user.username} />
+          </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {posts.map((post, index) => <PostCard key={post.id} post={post} rank={index + 1} />)}
-      </div>
+      {posts.length === 0
+        ? <div className="hard-panel p-5"><p className="text-sm font-bold">No posts yet.</p></div>
+        : (
+          <div className="space-y-4">
+            {posts.map((post) => <PostCard key={post.publicCode} post={post} />)}
+          </div>
+        )}
     </section>
   );
 }
 
-function ProfileStat({ label, value }: { label: string; value: number | string }) {
+function BlockControl({ profileUsername }: { profileUsername: string }) {
+  const signedIn = useIsSignedIn();
+  const account = useAccount();
+  const getToken = useAuthToken();
+  const [blocked, setBlocked] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  if (!signedIn) return null;
+  if (account.data?.user?.username === profileUsername) return null;
+
+  async function toggle() {
+    setBusy(true);
+    try {
+      if (blocked) {
+        await unblockUser(profileUsername, getToken);
+        setBlocked(false);
+      } else {
+        await blockUser(profileUsername, getToken);
+        setBlocked(true);
+      }
+    } catch {
+      // Ignore; user can retry.
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
-    <div className="border-2 border-ink bg-newsprint p-2 text-center">
-      <p className="truncate text-xl font-black uppercase">{value}</p>
-      <p className="font-mono text-[10px] font-black uppercase text-oxide">{label}</p>
+    <button
+      type="button"
+      onClick={toggle}
+      disabled={busy}
+      className="border-2 border-ink bg-paper px-2 py-1 uppercase hover:bg-oxide hover:text-paper"
+    >
+      {blocked ? "Unblock" : "Block"}
+    </button>
+  );
+}
+
+function Shell({ message }: { message: string }) {
+  return (
+    <div className="hard-panel grid min-h-60 place-items-center bg-newsprint p-6">
+      <p className="font-mono text-sm font-black uppercase">{message}</p>
     </div>
   );
 }

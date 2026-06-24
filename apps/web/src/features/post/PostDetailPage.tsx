@@ -1,105 +1,103 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "@tanstack/react-router";
-import { Flag, MessageCircle, Share2 } from "lucide-react";
-import { fetchComments, fetchPost } from "../../app/api.ts";
-import { MediaRenderer } from "../../components/MediaRenderer.tsx";
-import { VoteButton } from "../../components/VoteButton.tsx";
+import { useEffect } from "react";
+import { fetchComments, fetchPost, sendEvent } from "../../app/api.ts";
+import { PostMedia } from "../../components/PostMedia.tsx";
+import { ReactionBar } from "../../components/ReactionBar.tsx";
+import { ReportButton } from "../../components/ReportButton.tsx";
+import { ShareControls } from "../../components/ShareControls.tsx";
 import { CommentThread } from "./comments/CommentThread.tsx";
 
-const detailDateFormatter = new Intl.DateTimeFormat("en", {
+const dateFormatter = new Intl.DateTimeFormat("en", {
   month: "short",
   day: "numeric",
   year: "numeric",
 });
 
 export function PostDetailPage() {
-  const params = useParams({ strict: false }) as { postId?: string };
-  const postId = params.postId ?? "";
+  const params = useParams({ strict: false }) as { postCode?: string };
+  const postCode = params.postCode ?? "";
+
   const postQuery = useQuery({
-    queryKey: ["post", postId],
-    queryFn: () => fetchPost(postId),
-    enabled: postId.length > 0,
+    queryKey: ["post", postCode],
+    queryFn: () => fetchPost(postCode),
+    enabled: postCode.length > 0,
   });
   const commentsQuery = useQuery({
-    queryKey: ["post-comments", postId],
-    queryFn: () => fetchComments(postId),
-    enabled: postId.length > 0,
+    queryKey: ["post-comments", postCode],
+    queryFn: () => fetchComments(postCode),
+    enabled: postCode.length > 0,
   });
 
-  if (postQuery.isLoading) {
-    return <PostShell message="Loading post" />;
-  }
+  // Record the anonymous/authenticated open for the share funnel (spec §10.2).
+  useEffect(() => {
+    if (postCode) sendEvent("post_opened", postCode);
+  }, [postCode]);
 
+  if (postQuery.isPending) {
+    return <Shell message="Loading post…" />;
+  }
   if (postQuery.isError || !postQuery.data) {
-    return <PostShell message="Post not found" />;
+    return <Shell message="This post is unavailable." />;
   }
 
   const post = postQuery.data;
 
   return (
-    <section className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
-      <article className="space-y-4">
-        <div className="hard-panel overflow-hidden">
-          <MediaRenderer media={post.media} mode="detail" />
-          <div className="space-y-4 border-t-2 border-ink bg-paper p-4">
-            <div className="flex flex-wrap items-start gap-3">
-              <VoteButton score={post.score} />
-              <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-2 font-mono text-xs font-black uppercase text-oxide">
-                  <Link to="/$username" params={{ username: `@${post.author.username}` }}>
-                    @{post.author.username}
-                  </Link>
-                  <span>{detailDateFormatter.format(new Date(post.createdAt))}</span>
-                  <span>{post.media.provider}</span>
-                </div>
-                <h1 className="mt-2 text-3xl font-black leading-tight sm:text-4xl">{post.title}</h1>
-              </div>
-            </div>
+    <article className="space-y-4">
+      <div className="hard-panel overflow-hidden">
+        <div className="flex items-center justify-between border-b-2 border-ink bg-newsprint px-4 py-2 font-mono text-xs font-black uppercase">
+          <Link to="/$username" params={{ username: `@${post.author.username}` }} className="hover:underline">
+            @{post.author.username}
+          </Link>
+          <span className="text-oxide">{dateFormatter.format(new Date(post.createdAt))}</span>
+        </div>
 
-            {post.body
-              ? <p className="max-w-3xl text-sm font-bold leading-6">{post.body}</p>
-              : null}
+        <div className="space-y-4 p-4">
+          <h1 className="text-3xl font-black leading-tight">{post.title}</h1>
+          <PostMedia post={post} mode="detail" />
 
+          {post.tags.length > 0 && (
             <div className="flex flex-wrap gap-2">
-              <button type="button" className="tool-button">
-                <MessageCircle aria-hidden="true" size={18} />
-                {post.commentCount} comments
-              </button>
-              <button type="button" className="icon-button" aria-label="Share post">
-                <Share2 aria-hidden="true" size={18} />
-              </button>
-              <button type="button" className="icon-button" aria-label="Report post">
-                <Flag aria-hidden="true" size={18} />
-              </button>
+              {post.tags.map((tag) => (
+                <span
+                  key={tag}
+                  className="border-2 border-ink bg-cyan px-2 py-1 font-mono text-[11px] font-black uppercase"
+                >
+                  #{tag}
+                </span>
+              ))}
             </div>
+          )}
+
+          <div className="flex flex-wrap items-center gap-3">
+            <ReactionBar
+              kind="post"
+              code={post.publicCode}
+              score={post.score}
+              viewerReaction={post.viewerReaction}
+            />
+            <ReportButton targetType="post" targetCode={post.publicCode} />
+          </div>
+
+          <div className="border-t-2 border-ink pt-3">
+            <ShareControls post={post} />
           </div>
         </div>
+      </div>
 
-        <CommentThread
-          comments={commentsQuery.data?.items ?? []}
-          isLoading={commentsQuery.isLoading}
-        />
-      </article>
-
-      <aside className="space-y-4">
-        <div className="hard-panel bg-newsprint p-4">
-          <p className="font-mono text-xs font-black uppercase text-oxide">Ad status</p>
-          <p className="mt-2 text-2xl font-black uppercase">
-            {post.monetizationStatus.replace("_", " ")}
-          </p>
-          <p className="mt-2 text-sm font-bold leading-6">
-            Safety score{" "}
-            {(post.adSafetyScore * 100).toFixed(0)}. Ads render only after the content is safe.
-          </p>
-        </div>
-      </aside>
-    </section>
+      <CommentThread
+        postCode={postCode}
+        comments={commentsQuery.data?.items ?? []}
+        isLoading={commentsQuery.isPending}
+      />
+    </article>
   );
 }
 
-function PostShell({ message }: { message: string }) {
+function Shell({ message }: { message: string }) {
   return (
-    <div className="hard-panel grid min-h-80 place-items-center bg-newsprint p-6">
+    <div className="hard-panel grid min-h-60 place-items-center bg-newsprint p-6">
       <p className="font-mono text-sm font-black uppercase">{message}</p>
     </div>
   );

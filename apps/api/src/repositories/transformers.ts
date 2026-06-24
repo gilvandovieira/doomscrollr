@@ -2,163 +2,123 @@ import type {
   Author,
   Comment,
   FeedPost,
-  MediaAsset,
-  Report,
+  PostKind,
+  PostStatus,
+  ReplyComment,
   UserProfile,
+  UserRole,
+  UserStatus,
 } from "@doomscrollr/shared/types.ts";
 
-type AuthorRow = {
-  id: string;
+export type AuthorRow = {
   username: string;
-  displayName: string;
+  displayName: string | null;
   avatarUrl: string | null;
 };
 
-type MediaRow = {
-  id: string;
-  provider: MediaAsset["provider"];
-  mediaType: MediaAsset["mediaType"];
-  providerMediaId: string | null;
-  originalUrl: string | null;
-  embedUrl: string | null;
-  thumbnailUrl: string;
-  previewUrl: string | null;
-  width: number | null;
-  height: number | null;
-  durationSeconds: number | null;
-  aspectRatio: MediaAsset["aspectRatio"];
-  attributionLabel: string | null;
-  attributionUrl: string | null;
-  status: MediaAsset["status"];
-};
-
+// Internal `id` is carried only for server-side joins (tags, reactions); it is
+// never written to the public shape (spec §6).
 export type FeedPostRow = {
   id: string;
-  title: string;
+  publicCode: string;
   slug: string;
+  postKind: PostKind;
+  title: string;
+  bodyText: string | null;
+  imageUrl: string | null;
+  youtubeUrl: string | null;
+  youtubeVideoId: string | null;
+  youtubeIsShort: boolean;
+  status: PostStatus;
   score: number;
-  upvoteCount: number;
-  downvoteCount: number;
+  reactionCount: number;
   commentCount: number;
-  status: FeedPost["status"];
-  monetizationStatus: FeedPost["monetizationStatus"];
-  adSafetyScore: number;
   createdAt: Date;
-  updatedAt: Date;
   author: AuthorRow;
-  media: MediaRow;
 };
 
 export type CommentRow = {
   id: string;
-  postId: string;
-  parentId: string | null;
-  body: string;
+  publicCode: string;
+  parentCommentCode: string | null;
+  bodyText: string;
   score: number;
+  reactionCount: number;
+  replyCount: number;
   status: Comment["status"];
-  moderationStatus: Comment["moderationStatus"];
   createdAt: Date;
-  updatedAt: Date;
   author: AuthorRow;
 };
 
 export type UserRow = AuthorRow & {
-  role: UserProfile["role"];
-  status: UserProfile["status"];
+  role: UserRole;
+  status: UserStatus;
   createdAt: Date;
-};
-
-export type ReportRow = {
-  id: string;
-  reporter: AuthorRow;
-  targetType: Report["targetType"];
-  targetId: string;
-  reason: Report["reason"];
-  details: string | null;
-  status: Report["status"];
-  createdAt: Date;
-  reviewedAt: Date | null;
-  reviewedBy: AuthorRow | null;
 };
 
 export function toAuthor(row: AuthorRow): Author {
   return {
-    id: row.id,
     username: row.username,
     displayName: row.displayName,
-    avatarUrl: row.avatarUrl ?? `https://api.dicebear.com/9.x/shapes/svg?seed=${row.username}`,
+    avatarUrl: row.avatarUrl,
   };
 }
 
-export function toMediaAsset(row: MediaRow): MediaAsset {
-  return {
-    id: row.id,
-    provider: row.provider,
-    mediaType: row.mediaType,
-    providerMediaId: row.providerMediaId,
-    originalUrl: row.originalUrl,
-    embedUrl: row.embedUrl,
-    thumbnailUrl: row.thumbnailUrl,
-    previewUrl: row.previewUrl,
-    width: row.width,
-    height: row.height,
-    durationSeconds: row.durationSeconds,
-    aspectRatio: row.aspectRatio,
-    attributionLabel: row.attributionLabel,
-    attributionUrl: row.attributionUrl,
-    status: row.status,
-  };
+export function canonicalPath(publicCode: string, slug: string): string {
+  return `/p/${publicCode}/${slug}`;
 }
 
-export function toFeedPost(row: FeedPostRow, tags: string[]): FeedPost {
+export function toFeedPost(
+  row: FeedPostRow,
+  tags: string[],
+  viewerReaction: 1 | -1 | null = null,
+): FeedPost {
   return {
-    id: row.id,
-    title: row.title,
+    publicCode: row.publicCode,
     slug: row.slug,
+    postKind: row.postKind,
+    title: row.title,
+    bodyText: row.bodyText,
+    imageUrl: row.imageUrl,
+    youtubeUrl: row.youtubeUrl,
+    youtubeVideoId: row.youtubeVideoId,
+    youtubeIsShort: row.youtubeIsShort,
+    status: row.status,
     score: row.score,
-    upvoteCount: row.upvoteCount,
-    downvoteCount: row.downvoteCount,
+    reactionCount: row.reactionCount,
     commentCount: row.commentCount,
-    status: row.status,
-    monetizationStatus: row.monetizationStatus,
-    adSafetyScore: row.adSafetyScore,
-    createdAt: row.createdAt.toISOString(),
-    updatedAt: row.updatedAt.toISOString(),
     author: toAuthor(row.author),
-    media: toMediaAsset(row.media),
     tags,
+    canonicalPath: canonicalPath(row.publicCode, row.slug),
+    createdAt: row.createdAt.toISOString(),
+    viewerReaction,
   };
 }
 
-export function toComment(row: CommentRow, replies: Comment["replies"] = []): Comment {
+export function toReply(row: CommentRow, viewerReaction: 1 | -1 | null = null): ReplyComment {
   return {
-    id: row.id,
-    postId: row.postId,
+    publicCode: row.publicCode,
     author: toAuthor(row.author),
-    parentId: row.parentId,
-    body: row.body,
+    parentCommentCode: row.parentCommentCode,
+    bodyText: row.bodyText,
     score: row.score,
+    reactionCount: row.reactionCount,
+    replyCount: row.replyCount,
     status: row.status,
-    moderationStatus: row.moderationStatus,
     createdAt: row.createdAt.toISOString(),
-    updatedAt: row.updatedAt.toISOString(),
-    replies,
-  };
-}
-
-export function toCommentReply(row: CommentRow): Comment["replies"][number] {
-  return {
-    id: row.id,
-    postId: row.postId,
-    author: toAuthor(row.author),
-    parentId: row.parentId,
-    body: row.body,
-    score: row.score,
-    status: row.status,
-    moderationStatus: row.moderationStatus,
-    createdAt: row.createdAt.toISOString(),
-    updatedAt: row.updatedAt.toISOString(),
+    viewerReaction,
     replies: [],
+  };
+}
+
+export function toComment(
+  row: CommentRow,
+  replies: ReplyComment[] = [],
+  viewerReaction: 1 | -1 | null = null,
+): Comment {
+  return {
+    ...toReply(row, viewerReaction),
+    replies,
   };
 }
 
@@ -170,24 +130,8 @@ export function toUserProfile(
     ...toAuthor(row),
     role: row.role,
     status: row.status,
-    bio: "",
     postCount: counts.postCount,
     commentCount: counts.commentCount,
     createdAt: row.createdAt.toISOString(),
-  };
-}
-
-export function toReport(row: ReportRow): Report {
-  return {
-    id: row.id,
-    reporter: toAuthor(row.reporter),
-    targetType: row.targetType,
-    targetId: row.targetId,
-    reason: row.reason,
-    details: row.details,
-    status: row.status,
-    createdAt: row.createdAt.toISOString(),
-    reviewedAt: row.reviewedAt?.toISOString() ?? null,
-    reviewedBy: row.reviewedBy ? toAuthor(row.reviewedBy) : null,
   };
 }
