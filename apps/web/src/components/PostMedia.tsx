@@ -15,8 +15,8 @@ export function PostMedia({ post, mode }: PostMediaProps) {
         alt=""
         loading="lazy"
         className={mode === "card"
-          ? "max-h-[460px] w-full border-y-2 border-ink object-cover"
-          : "w-full border-2 border-ink"}
+          ? "max-h-[460px] w-full object-cover"
+          : "w-full rounded-2xl border border-ink/10"}
       />
     );
   }
@@ -24,7 +24,7 @@ export function PostMedia({ post, mode }: PostMediaProps) {
   if (post.postKind === "youtube" && post.youtubeVideoId) {
     if (mode === "detail") {
       return (
-        <div className="aspect-video w-full border-2 border-ink">
+        <div className="aspect-video w-full overflow-hidden rounded-2xl border border-ink/10">
           <iframe
             title={post.title}
             src={`https://www.youtube.com/embed/${post.youtubeVideoId}`}
@@ -40,7 +40,7 @@ export function PostMedia({ post, mode }: PostMediaProps) {
         src={`https://i.ytimg.com/vi/${post.youtubeVideoId}/hqdefault.jpg`}
         alt=""
         loading="lazy"
-        className="max-h-[460px] w-full border-y-2 border-ink object-cover"
+        className="max-h-[460px] w-full object-cover"
       />
     );
   }
@@ -49,8 +49,8 @@ export function PostMedia({ post, mode }: PostMediaProps) {
     return (
       <p
         className={mode === "card"
-          ? "border-y-2 border-ink bg-newsprint px-3 py-4 text-sm font-medium leading-6 line-clamp-4"
-          : "whitespace-pre-wrap border-2 border-ink bg-newsprint px-4 py-4 text-base leading-7"}
+          ? "bg-newsprint px-4 py-3.5 text-sm leading-6 line-clamp-4"
+          : "whitespace-pre-wrap rounded-2xl bg-newsprint px-4 py-4 text-base leading-7"}
       >
         {post.bodyText}
       </p>

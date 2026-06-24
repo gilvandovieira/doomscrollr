@@ -1,6 +1,7 @@
 import type { FeedPost } from "@doomscrollr/shared/types.ts";
 import { Link } from "@tanstack/react-router";
 import { MessageCircle } from "lucide-react";
+import type { CSSProperties } from "react";
 import { PostMedia } from "../../components/PostMedia.tsx";
 
 const KIND_LABEL: Record<FeedPost["postKind"], string> = {
@@ -9,52 +10,57 @@ const KIND_LABEL: Record<FeedPost["postKind"], string> = {
   youtube: "YouTube",
 };
 
-export function PostCard({ post }: { post: FeedPost }) {
+// A post reads like something just shared into a chat: who shared it, the
+// content, then the reaction/discussion row.
+export function PostCard({ post, index = 0 }: { post: FeedPost; index?: number }) {
+  const enterStyle = { "--stagger": `${Math.min(index, 7) * 32}ms` } as CSSProperties;
+
   return (
-    <article className="feed-card">
-      <div className="flex items-center justify-between gap-3 border-b-2 border-ink bg-newsprint px-3 py-2">
+    <article className="feed-card post-card feed-card--enter" style={enterStyle}>
+      <div className="post-card__head">
         <Link
           to="/$username"
           params={{ username: `@${post.author.username}` }}
-          className="meta-label inline-flex min-h-10 min-w-0 items-center truncate text-oxide hover:underline"
+          className="post-card__avatar"
+          aria-label={`@${post.author.username}`}
+        >
+          {post.author.avatarUrl
+            ? <img src={post.author.avatarUrl} alt="" loading="lazy" />
+            : post.author.username.slice(0, 1).toUpperCase()}
+        </Link>
+        <Link
+          to="/$username"
+          params={{ username: `@${post.author.username}` }}
+          className="post-card__handle"
         >
           @{post.author.username}
         </Link>
-        <span className="meta-label shrink-0 text-ink/75">
-          {KIND_LABEL[post.postKind]}
-        </span>
+        <span className="post-card__kind">{KIND_LABEL[post.postKind]}</span>
       </div>
 
       <Link
         to="/p/$postCode/$slug"
         params={{ postCode: post.publicCode, slug: post.slug }}
-        className="block"
+        className="post-card__link"
       >
-        <h2 className="px-3 pt-3 text-[1.35rem] font-black leading-tight tracking-[-0.02em] hover:underline">
-          {post.title}
-        </h2>
+        <h2 className="post-card__title">{post.title}</h2>
         <PostMedia post={post} mode="card" />
       </Link>
 
-      <div className="space-y-3 p-3">
+      <div className="post-card__foot">
         {post.tags.length > 0 && (
-          <div className="flex flex-wrap gap-2">
-            {post.tags.map((tag) => (
-              <span key={tag} className="tag-chip">
-                #{tag}
-              </span>
-            ))}
+          <div className="flex min-w-0 flex-wrap gap-1.5">
+            {post.tags.map((tag) => <span key={tag} className="tag-chip">#{tag}</span>)}
           </div>
         )}
 
-        <div className="flex items-center justify-between gap-2">
-          <span className="meta-label text-ink/80">
-            {post.score} {post.score === 1 ? "point" : "points"}
-          </span>
+        <div className="post-card__stats">
+          <span>{post.score} {post.score === 1 ? "point" : "points"}</span>
           <Link
             to="/p/$postCode/$slug"
             params={{ postCode: post.publicCode, slug: post.slug }}
-            className="inline-flex min-h-10 items-center gap-1 rounded-full px-2 font-mono text-xs font-black hover:bg-signal hover:text-pitch"
+            className="post-card__comments"
+            aria-label={`${post.commentCount} comments`}
           >
             <MessageCircle aria-hidden="true" size={16} />
             {post.commentCount}

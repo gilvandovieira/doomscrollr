@@ -46,17 +46,17 @@ export function PostDetailPage() {
   return (
     <article className="space-y-4">
       <div className="hard-panel">
-        <div className="flex items-center justify-between gap-3 border-b-2 border-ink bg-newsprint px-4 py-2">
+        <div className="flex items-center justify-between gap-3 border-b border-ink/10 px-4 py-3">
           <Link
             to="/$username"
             params={{ username: `@${post.author.username}` }}
             className="inline-flex min-h-10 items-center hover:underline"
           >
-            <span className="meta-label text-oxide">
+            <span className="meta-label font-semibold text-ink/80">
               @{post.author.username}
             </span>
           </Link>
-          <span className="meta-label text-ink/75">
+          <span className="meta-label">
             {dateFormatter.format(new Date(post.createdAt))}
           </span>
         </div>
@@ -85,7 +85,7 @@ export function PostDetailPage() {
             <ReportButton targetType="post" targetCode={post.publicCode} />
           </div>
 
-          <div className="border-t-2 border-ink pt-3">
+          <div className="border-t border-ink/10 pt-4">
             <ShareControls post={post} />
           </div>
         </div>

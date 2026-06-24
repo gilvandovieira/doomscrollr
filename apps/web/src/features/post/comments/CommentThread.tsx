@@ -16,9 +16,9 @@ type CommentThreadProps = {
 export function CommentThread({ postCode, comments, isLoading }: CommentThreadProps) {
   return (
     <section className="hard-panel bg-paper">
-      <div className="flex items-center gap-2 border-b-2 border-ink bg-newsprint px-4 py-3">
+      <div className="flex items-center gap-2 border-b border-ink/10 px-4 py-3">
         <MessageSquareText aria-hidden="true" size={20} />
-        <h2 className="text-xl font-black">Discussion</h2>
+        <h2 className="text-lg font-bold tracking-[-0.01em]">Discussion</h2>
       </div>
 
       <div className="space-y-4 p-4">
@@ -94,9 +94,9 @@ function CommentItem({ postCode, comment }: { postCode: string; comment: Comment
   const signedIn = useIsSignedIn();
 
   return (
-    <article className="border-2 border-ink bg-newsprint p-3">
+    <article className="rounded-2xl border border-ink/10 bg-newsprint p-3.5">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="meta-label text-oxide">
+        <span className="meta-label font-semibold text-ink/80">
           @{comment.author.username}
         </span>
         <ReportButton targetType="comment" targetCode={comment.publicCode} />
@@ -122,7 +122,7 @@ function CommentItem({ postCode, comment }: { postCode: string; comment: Comment
       </div>
 
       {replying && (
-        <div className="mt-3 rounded-lg bg-paper/70 p-3">
+        <div className="comment-reply-box mt-3 rounded-lg bg-paper/70 p-3">
           <CommentComposer
             postCode={postCode}
             parentCommentCode={comment.publicCode}
@@ -143,9 +143,9 @@ function CommentItem({ postCode, comment }: { postCode: string; comment: Comment
 
 function CommentReply({ reply }: { reply: ReplyComment }) {
   return (
-    <article className="border-2 border-ink bg-paper p-3">
+    <article className="rounded-xl border border-ink/10 bg-paper p-3.5">
       <div className="flex items-center justify-between gap-2">
-        <span className="meta-label text-oxide">
+        <span className="meta-label font-semibold text-ink/80">
           @{reply.author.username}
         </span>
         <ReportButton targetType="comment" targetCode={reply.publicCode} />

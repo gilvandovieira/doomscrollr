@@ -2,9 +2,44 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#f1f7f8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#fbfbfd" />
+    <meta name="description" content="Post it. Drop it in the group chat. Watch them argue." />
+
+    <!-- Installable app shell -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/icon.svg" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Doomscrollr" />
+
+    <!-- Display face (body uses the system stack) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&display=swap"
+    />
+
     <title>Doomscrollr</title>
+
+    <!-- Set the theme before first paint so there is no light/dark flash. -->
+    <script>
+      (function () {
+        try {
+          var pref = localStorage.getItem("doomscrollr.theme");
+          var dark = matchMedia("(prefers-color-scheme: dark)").matches;
+          var resolved = pref === "light" || pref === "dark" ? pref : dark ? "dark" : "light";
+          var el = document.documentElement;
+          if (pref === "light" || pref === "dark") el.setAttribute("data-theme", pref);
+          el.style.colorScheme = resolved;
+          var meta = document.querySelector('meta[name="theme-color"]');
+          if (meta) meta.setAttribute("content", resolved === "dark" ? "#0f1014" : "#fbfbfd");
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

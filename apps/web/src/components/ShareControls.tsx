@@ -42,11 +42,17 @@ export function ShareControls({ post }: { post: FeedPost }) {
 
   return (
     <div className="share-controls">
-      <button type="button" onClick={shareWhatsApp} className="tool-button">
+      <button type="button" onClick={shareWhatsApp} className="tool-button share-whatsapp">
         <Share2 aria-hidden="true" size={17} />
         WhatsApp
       </button>
-      <button type="button" onClick={copyLink} className="tool-button">
+      <button
+        type="button"
+        onClick={copyLink}
+        className={`tool-button share-controls__copy ${
+          copied ? "share-controls__copy--copied" : ""
+        }`}
+      >
         {copied ? <Check aria-hidden="true" size={17} /> : <Copy aria-hidden="true" size={17} />}
         {copied ? "Copied" : "Copy link"}
       </button>

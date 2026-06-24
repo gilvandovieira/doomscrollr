@@ -71,6 +71,7 @@ export function CreatePage() {
             key={tab.kind}
             type="button"
             onClick={() => setKind(tab.kind)}
+            aria-pressed={kind === tab.kind}
             className={`tool-button px-2 ${kind === tab.kind ? "bg-signal text-pitch" : ""}`}
           >
             {tab.label}
@@ -89,36 +90,38 @@ export function CreatePage() {
           />
         </Field>
 
-        {kind === "text" && (
-          <Field label="Body">
-            <textarea
-              value={bodyText}
-              onChange={(event) => setBodyText(event.target.value)}
-              className="field-control min-h-32 resize-y p-3 text-sm"
-              placeholder="Write your post"
-            />
-          </Field>
-        )}
-        {kind === "external_image" && (
-          <Field label="Image URL">
-            <input
-              value={imageUrl}
-              onChange={(event) => setImageUrl(event.target.value)}
-              placeholder="https://example.com/meme.jpg"
-              className="field-control min-h-11 px-3 text-sm"
-            />
-          </Field>
-        )}
-        {kind === "youtube" && (
-          <Field label="YouTube URL">
-            <input
-              value={youtubeUrl}
-              onChange={(event) => setYoutubeUrl(event.target.value)}
-              placeholder="https://www.youtube.com/watch?v=…"
-              className="field-control min-h-11 px-3 text-sm"
-            />
-          </Field>
-        )}
+        <div key={kind} className="create-kind-fields">
+          {kind === "text" && (
+            <Field label="Body">
+              <textarea
+                value={bodyText}
+                onChange={(event) => setBodyText(event.target.value)}
+                className="field-control min-h-32 resize-y p-3 text-sm"
+                placeholder="Write your post"
+              />
+            </Field>
+          )}
+          {kind === "external_image" && (
+            <Field label="Image URL">
+              <input
+                value={imageUrl}
+                onChange={(event) => setImageUrl(event.target.value)}
+                placeholder="https://example.com/meme.jpg"
+                className="field-control min-h-11 px-3 text-sm"
+              />
+            </Field>
+          )}
+          {kind === "youtube" && (
+            <Field label="YouTube URL">
+              <input
+                value={youtubeUrl}
+                onChange={(event) => setYoutubeUrl(event.target.value)}
+                placeholder="https://www.youtube.com/watch?v=…"
+                className="field-control min-h-11 px-3 text-sm"
+              />
+            </Field>
+          )}
+        </div>
 
         <Field label="Tags (optional, comma separated)">
           <input
@@ -141,8 +144,8 @@ export function CreatePage() {
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <label className="block space-y-1">
-      <span className="meta-label text-oxide">{label}</span>
+    <label className="block space-y-1.5">
+      <span className="meta-label">{label}</span>
       {children}
     </label>
   );

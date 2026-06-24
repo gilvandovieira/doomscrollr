@@ -30,21 +30,22 @@ export function ProfilePage() {
 
   return (
     <section className="space-y-4">
-      <div className="hard-panel grid gap-4 bg-paper p-4 sm:grid-cols-[96px_minmax(0,1fr)] sm:items-center">
+      <div className="hard-panel grid gap-4 bg-paper p-5 sm:grid-cols-[88px_minmax(0,1fr)] sm:items-center">
         <img
           src={user.avatarUrl ?? `https://api.dicebear.com/9.x/shapes/svg?seed=${user.username}`}
           alt=""
-          className="h-24 w-24 rounded-[var(--radius-card)] border-2 border-ink bg-newsprint object-cover"
+          className="h-[88px] w-[88px] rounded-2xl border border-ink/10 bg-newsprint object-cover"
         />
         <div className="min-w-0">
-          <p className="meta-label text-oxide">@{user.username}</p>
-          <h1 className="truncate text-4xl font-black leading-none tracking-[-0.02em]">
+          <p className="meta-label">@{user.username}</p>
+          <h1 className="truncate font-display text-3xl font-bold leading-tight tracking-[-0.02em]">
             {user.displayName ?? user.username}
           </h1>
-          <div className="mt-2 flex flex-wrap items-center gap-3 font-mono text-xs font-black">
+          <div className="mt-3 flex flex-wrap items-center gap-2.5 text-sm font-medium text-ink/70">
             <span>{user.postCount} posts</span>
+            <span aria-hidden="true" className="text-ink/30">·</span>
             <span>{user.commentCount} comments</span>
-            {user.role === "admin" && <span className="text-oxide">admin</span>}
+            {user.role === "admin" && <span className="tag-chip">admin</span>}
             <BlockControl profileUsername={user.username} />
           </div>
         </div>
@@ -58,7 +59,13 @@ export function ProfilePage() {
         )
         : (
           <div className="space-y-4">
-            {posts.map((post) => <PostCard key={post.publicCode} post={post} />)}
+            {posts.map((post, index) => (
+              <PostCard
+                key={post.publicCode}
+                post={post}
+                index={index}
+              />
+            ))}
           </div>
         )}
     </section>
@@ -97,7 +104,7 @@ function BlockControl({ profileUsername }: { profileUsername: string }) {
       type="button"
       onClick={toggle}
       disabled={busy}
-      className="rounded-full border-2 border-ink bg-paper px-3 py-1 font-black hover:bg-oxide hover:text-pitch"
+      className="rounded-full border border-ink/15 bg-paper px-3 py-1.5 font-semibold transition hover:bg-oxide hover:text-pitch"
     >
       {blocked ? "Unblock" : "Block"}
     </button>

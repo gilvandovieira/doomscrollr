@@ -41,7 +41,7 @@ export function FeedPage() {
       </div>
 
       <div className="space-y-3">
-        {posts.map((post) => <PostCard key={post.publicCode} post={post} />)}
+        {posts.map((post, index) => <PostCard key={post.publicCode} post={post} index={index} />)}
       </div>
       {feed.hasNextPage && (
         <button

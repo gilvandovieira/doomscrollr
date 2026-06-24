@@ -1,0 +1,16 @@
+{
+  "name": "Doomscrollr",
+  "short_name": "Doomscrollr",
+  "description": "Post it. Drop it in the group chat. Watch them argue.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0f1014",
+  "theme_color": "#5b5bf0",
+  "categories": ["social"],
+  "icons": [
+    { "src": "/icon.svg", "type": "image/svg+xml", "sizes": "any", "purpose": "any" },
+    { "src": "/icon.svg", "type": "image/svg+xml", "sizes": "any", "purpose": "maskable" }
+  ]
+}

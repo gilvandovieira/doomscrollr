@@ -30,8 +30,8 @@ if (HAS_CLERK && CLERK_PUBLISHABLE_KEY) {
       publishableKey={CLERK_PUBLISHABLE_KEY}
       appearance={{
         variables: {
-          colorPrimary: "#f25f3d",
-          borderRadius: "0px",
+          colorPrimary: "#5b5bf0",
+          borderRadius: "12px",
         },
       }}
     >

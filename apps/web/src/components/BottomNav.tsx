@@ -1,23 +1,26 @@
 import { Link } from "@tanstack/react-router";
-import { Clock3, PenSquare } from "lucide-react";
+import { House, PenSquare } from "lucide-react";
 
-const navItemClass = "bottom-nav__item";
-const activeNavItemClass = "bottom-nav__item bottom-nav__item--active";
-
+// Mobile bottom tab bar. Hidden on desktop (the rail takes over) via CSS.
 export function BottomNav() {
   return (
-    <nav className="bottom-nav" aria-label="Primary navigation">
+    <nav className="bottom-nav" aria-label="Primary">
       <div className="bottom-nav__inner">
-        <Link to="/" className={navItemClass} activeProps={{ className: activeNavItemClass }}>
-          <Clock3 aria-hidden="true" size={18} strokeWidth={2.5} />
+        <Link
+          to="/"
+          activeOptions={{ exact: true }}
+          className="bottom-nav__item"
+          activeProps={{ className: "bottom-nav__item bottom-nav__item--active" }}
+        >
+          <House aria-hidden="true" size={20} strokeWidth={2.25} />
           Recent
         </Link>
         <Link
           to="/create"
-          className={navItemClass}
-          activeProps={{ className: activeNavItemClass }}
+          className="bottom-nav__item"
+          activeProps={{ className: "bottom-nav__item bottom-nav__item--active" }}
         >
-          <PenSquare aria-hidden="true" size={18} strokeWidth={2.5} />
+          <PenSquare aria-hidden="true" size={20} strokeWidth={2.25} />
           Create
         </Link>
       </div>
