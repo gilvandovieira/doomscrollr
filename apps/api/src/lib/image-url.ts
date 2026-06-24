@@ -10,6 +10,14 @@ export const ALLOWED_IMAGE_CONTENT_TYPES = [
 
 export type ImageUrlCheck = { ok: true } | { ok: false; reason: string };
 
+const E2E_IMAGE_URL = "https://e2e.invalid/doomscrollr.png";
+
+function isE2eImageUrl(rawUrl: string): boolean {
+  return Deno.env.get("APP_ENV") === "test" &&
+    Deno.env.get("E2E_AUTH") === "1" &&
+    rawUrl === E2E_IMAGE_URL;
+}
+
 function isPrivateHostname(hostname: string): boolean {
   const host = hostname.toLowerCase();
   if (host === "localhost" || host.endsWith(".localhost")) return true;
@@ -30,6 +38,8 @@ function isPrivateHostname(hostname: string): boolean {
 
 // Synchronous structural validation: protocol, host, and obvious SVG rejection.
 export function validateExternalImageUrl(rawUrl: string): ImageUrlCheck {
+  if (isE2eImageUrl(rawUrl)) return { ok: true };
+
   let url: URL;
   try {
     url = new URL(rawUrl);
@@ -56,6 +66,8 @@ export async function checkImageIsFetchable(
   rawUrl: string,
   timeoutMs = 2500,
 ): Promise<ImageUrlCheck> {
+  if (isE2eImageUrl(rawUrl)) return { ok: true };
+
   const structural = validateExternalImageUrl(rawUrl);
   if (!structural.ok) return structural;
 

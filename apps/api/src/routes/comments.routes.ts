@@ -22,7 +22,11 @@ commentsRoutes.post("/:commentCode/reactions", requireUser, async (c) => {
 
   const result = await setCommentReaction(user.id, ref.id, value);
   if (value !== 0) {
-    await recordPostEvent({ postId: ref.postId, actorUserId: user.id, eventType: "reaction_created" });
+    await recordPostEvent({
+      postId: ref.postId,
+      actorUserId: user.id,
+      eventType: "reaction_created",
+    });
   }
   return c.json(result);
 });

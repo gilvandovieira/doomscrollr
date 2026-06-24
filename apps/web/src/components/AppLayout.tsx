@@ -1,5 +1,5 @@
 import { Outlet } from "@tanstack/react-router";
-import { HAS_CLERK } from "../app/auth.ts";
+import { HAS_CLERK, HAS_TEST_AUTH } from "../app/auth.ts";
 import { BottomNav } from "./BottomNav.tsx";
 import { DesignStyleSwitcher } from "./DesignStyleSwitcher.tsx";
 import { Header } from "./Header.tsx";
@@ -11,7 +11,7 @@ export function AppLayout() {
       <Header />
       <main className="app-main">
         <DesignStyleSwitcher />
-        {HAS_CLERK && <UsernameGate />}
+        {(HAS_CLERK || HAS_TEST_AUTH) && <UsernameGate />}
         <Outlet />
       </main>
       <BottomNav />

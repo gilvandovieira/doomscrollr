@@ -1,7 +1,7 @@
 # Doomscrollr
 
-Doomscrollr is a Deno workspace app for a **SFW, mobile-first social posting experiment** centered on
-WhatsApp sharing and focused post discussion. v1 exists to validate one loop:
+Doomscrollr is a Deno workspace app for a **SFW, mobile-first social posting experiment** centered
+on WhatsApp sharing and focused post discussion. v1 exists to validate one loop:
 
 ```txt
 Create post -> Share to WhatsApp -> Friend opens -> Friend reacts/comments -> Creator returns
@@ -55,6 +55,8 @@ Admin:         GET /api/admin/reports · POST /api/admin/{posts,comments}/:code/
 ```sh
 deno task check        # typecheck all packages
 deno task test         # run unit + contract tests
+deno task test:e2e     # run API + mobile browser E2E smoke against local Postgres
+deno task report:funnel # print the v1 funnel report from DATABASE_URL
 deno task db:migrate   # apply migrations
 deno task db:seed      # seed SFW sample data
 deno task dev:api      # API on http://localhost:8000

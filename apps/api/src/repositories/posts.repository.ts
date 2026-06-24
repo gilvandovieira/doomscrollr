@@ -1,4 +1,4 @@
-import { postTags, posts, tags, users } from "@doomscrollr/database/schema.ts";
+import { posts, postTags, tags, users } from "@doomscrollr/database/schema.ts";
 import { generateId, generatePublicCode } from "@doomscrollr/shared/lib/ids.ts";
 import { slugify } from "@doomscrollr/shared/lib/slug.ts";
 import { RecentCursorSchema } from "@doomscrollr/shared/schemas/pagination.schema.ts";
@@ -231,7 +231,9 @@ export async function restorePostByCode(publicCode: string): Promise<boolean> {
 
 // Resolve requested tag slugs to active curated tag ids (spec §8.7). Unknown or
 // disabled tags are simply absent from the result; the caller validates the count.
-export async function getActiveTagsBySlugs(slugs: string[]): Promise<{ id: string; slug: string }[]> {
+export async function getActiveTagsBySlugs(
+  slugs: string[],
+): Promise<{ id: string; slug: string }[]> {
   if (slugs.length === 0) return [];
   return await requireDb()
     .select({ id: tags.id, slug: tags.slug })
@@ -265,7 +267,9 @@ export type CreatePostFields = {
   tagIds: string[];
 };
 
-export async function createPost(fields: CreatePostFields): Promise<{ publicCode: string; slug: string }> {
+export async function createPost(
+  fields: CreatePostFields,
+): Promise<{ publicCode: string; slug: string }> {
   const database = requireDb();
   const publicCode = await generateUniquePostCode();
   const slug = slugify(fields.title);

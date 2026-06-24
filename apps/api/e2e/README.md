@@ -77,12 +77,13 @@ USERNAME_REQUIRED` paths are tested.
 
 ## What's covered
 
-| File                          | Surface                                                                                                                    |
-| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| `core-loop.e2e.test.ts`       | create → feed → read → comment → one-level reply → react; YouTube posts; reply-nesting guard                               |
-| `og-sharing.e2e.test.ts`      | OG metadata + readable content without JS; no-slug URL; YouTube thumbnail; 404 unavailable page; `ds_aid` funnel cookie    |
-| `moderation.e2e.test.ts`      | block filtering (blocker-only); admin remove/restore; removed-post share safety; report queue + dismiss; admin authz (403) |
-| `auth-and-limits.e2e.test.ts` | 401 (no session); 409 (no username); username claim/taken/reserved/invalid; events endpoint validation; 429 rate limit     |
+| File                          | Surface                                                                                                                       |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `core-loop.e2e.test.ts`       | create → feed → read → comment → one-level reply → react; YouTube posts; reply-nesting guard                                  |
+| `og-sharing.e2e.test.ts`      | OG metadata + readable content without JS; no-slug URL; YouTube thumbnail; 404 unavailable page; `ds_aid` funnel cookie       |
+| `moderation.e2e.test.ts`      | block filtering (blocker-only); admin remove/restore; removed-post share safety; report queue + dismiss; admin authz (403)    |
+| `auth-and-limits.e2e.test.ts` | 401 (no session); 409 (no username); username claim/taken/reserved/invalid; events endpoint validation; 429 rate limit        |
+| `web-smoke.e2e.test.ts`       | desktop/mobile `/p` route render; mobile username claim; create text/image/YouTube; copy share; comment; react; report; block |
 
 ## Adding tests
 
@@ -107,9 +108,10 @@ Conventions:
   asserting on absolute counts.
 - Use the seam, not real Clerk. Tests should stay offline and deterministic.
 
-## Not covered here (future seam)
+## Browser smoke seam
 
-This layer is headless HTTP/API only. A browser smoke layer (driving the React SPA — hydration on
-`/p/:postCode`, anonymous feed render, share controls) is a deliberate follow-up. The natural seam:
-keep this harness for data + server setup and point a browser at the same origin, or boot Vite
-preview alongside. The flaky part to plan for is Clerk sign-in inside a real browser.
+`web-smoke.e2e.test.ts` boots Vite beside the same API harness and drives the React SPA in a mobile
+viewport. It uses `VITE_E2E_AUTH=1` plus `localStorage["doomscrollr.e2eClerkId"]` so the frontend
+can request `test:<clerkUserId>` tokens from the API's doubly-gated test seam. Real Clerk sign-in is
+still a manual production smoke concern, but the local create/comment/react/report/block UI loop is
+covered offline.

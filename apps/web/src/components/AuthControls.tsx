@@ -1,8 +1,16 @@
 import { Show, SignInButton, SignUpButton, UserButton } from "@clerk/react";
 import { LogIn, UserPlus } from "lucide-react";
-import { HAS_CLERK } from "../app/auth.ts";
+import { HAS_CLERK, HAS_TEST_AUTH, readTestAuthClerkId } from "../app/auth.ts";
 
 export function AuthControls() {
+  if (HAS_TEST_AUTH) {
+    return (
+      <span className="hidden min-h-10 items-center rounded-full border-2 border-ink bg-newsprint px-3 font-mono text-xs font-black text-ink md:inline-flex">
+        {readTestAuthClerkId() ? "Test user" : "Test auth off"}
+      </span>
+    );
+  }
+
   if (!HAS_CLERK) {
     return (
       <span className="hidden min-h-10 items-center rounded-full border-2 border-ink bg-newsprint px-3 font-mono text-xs font-black text-ink md:inline-flex">

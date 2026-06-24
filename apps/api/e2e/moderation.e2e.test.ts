@@ -63,7 +63,9 @@ e2eTest("a user cannot block themselves", async () => {
 });
 
 e2eTest("blocking hides the blocked author's comments from the blocker's thread", async () => {
-  const anonymousThread = await api<{ items: Comment[] }>(`/api/posts/${POSTS.fridayText.code}/comments`);
+  const anonymousThread = await api<{ items: Comment[] }>(
+    `/api/posts/${POSTS.fridayText.code}/comments`,
+  );
   assertStatus(anonymousThread, 200);
   assert(
     anonymousThread.json.items.some((comment) => comment.author.username === USERS.maya.username),
@@ -76,9 +78,12 @@ e2eTest("blocking hides the blocked author's comments from the blocker's thread"
   });
   assertStatus(block, 204);
 
-  const renThread = await api<{ items: Comment[] }>(`/api/posts/${POSTS.fridayText.code}/comments`, {
-    asUser: USERS.ren.clerkId,
-  });
+  const renThread = await api<{ items: Comment[] }>(
+    `/api/posts/${POSTS.fridayText.code}/comments`,
+    {
+      asUser: USERS.ren.clerkId,
+    },
+  );
   assertStatus(renThread, 200);
   assert(
     renThread.json.items.every((comment) =>

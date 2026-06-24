@@ -40,7 +40,11 @@ export type OpenGraph = {
 
 // `ogImage` is resolved by the caller (it may require a network check for external
 // images) and passed in. When omitted we use the generic preview.
-export function buildPostOpenGraph(post: FeedPost, canonicalUrl: string, ogImage?: string): OpenGraph {
+export function buildPostOpenGraph(
+  post: FeedPost,
+  canonicalUrl: string,
+  ogImage?: string,
+): OpenGraph {
   let image = DEFAULT_OG_IMAGE;
   if (post.postKind === "youtube" && post.youtubeVideoId) {
     image = youtubeThumbnail(post.youtubeVideoId);
@@ -81,8 +85,7 @@ function postPreviewHtml(post: FeedPost, appUrl: string): string {
   if (post.postKind === "external_image" && post.imageUrl) {
     media = `<img src="${escapeHtml(post.imageUrl)}" alt="" loading="lazy" />`;
   } else if (post.postKind === "youtube" && post.youtubeUrl) {
-    media =
-      `<p><a href="${escapeHtml(post.youtubeUrl)}" rel="noopener">Watch on YouTube</a></p>`;
+    media = `<p><a href="${escapeHtml(post.youtubeUrl)}" rel="noopener">Watch on YouTube</a></p>`;
   } else if (post.postKind === "text" && post.bodyText) {
     media = `<p class="body">${escapeHtml(post.bodyText)}</p>`;
   }

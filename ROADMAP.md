@@ -1,16 +1,19 @@
 # Doomscrollr Roadmap
 
-**Status:** v1 implementation largely complete as of 2026-06-24  
-**Source specs:** `specs/specs/doomscrollr_spec_v1.md`, `specs/specs/doomscrollr_spec_v2_milestone.md`, `specs/specs/doomscrollr_spec_v3_target.md`  
+**Status:** v1 implementation largely complete as of 2026-06-24\
+**Source specs:** `specs/specs/doomscrollr_spec_v1.md`,
+`specs/specs/doomscrollr_spec_v2_milestone.md`, `specs/specs/doomscrollr_spec_v3_target.md`
 
-The active v1 source of truth is `specs/specs/doomscrollr_spec_v1.md`. If this roadmap conflicts with the v1 spec, the v1 spec wins.
+The active v1 source of truth is `specs/specs/doomscrollr_spec_v1.md`. If this roadmap conflicts
+with the v1 spec, the v1 spec wins.
 
 > **Progress (2026-06-24):** The drifted "v2.2" full-platform model was dropped and the whole stack
-> was rebuilt to the v1 spec (sections 1–10 below are done apart from the noted gaps). All packages
-> typecheck, tests pass, the web app builds, and OG/feed/event read paths are verified live.
-> **Remaining v1 gaps:** comment-list block filtering (`V1-020`, `V1-077`), the funnel reporting
-> script (`V1-058`), full mobile + authenticated-UI smoke (`V1-087`, `V1-088`), and the live
-> validation run (section 11). Verified-end-to-end items are checked; partial items keep a note.
+> was rebuilt to the v1 spec. Sections 1–10 are complete: packages typecheck, unit tests pass, E2E
+> tests pass, the web app builds, OG/feed/event read paths are verified, block filtering is pushed
+> into feed/comment SQL, the v1 funnel report script exists, and desktop/mobile browser smoke covers
+> canonical post routes plus authenticated create/comment/react/report/block flows. **Remaining v1
+> gap:** the live validation run with real testers (section 11). Verified-end-to-end items are
+> checked; live-market items remain unchecked until actual tester data exists.
 
 The product bet is:
 
@@ -18,7 +21,8 @@ The product bet is:
 Create post -> Share to WhatsApp -> Friend opens -> Friend reacts/comments -> Creator returns
 ```
 
-v2 and v3 are not automatic. They are earned only if v1 proves real sharing, discussion, and return behavior.
+v2 and v3 are not automatic. They are earned only if v1 proves real sharing, discussion, and return
+behavior.
 
 ## V1: Validation Product
 
@@ -26,7 +30,8 @@ Goal: ship a SFW, mobile-first product that validates WhatsApp sharing and focus
 
 ### 1. Lock The V1 Contract
 
-- [x] `V1-001` Treat `specs/specs/doomscrollr_spec_v1.md` as the controlling implementation contract.
+- [x] `V1-001` Treat `specs/specs/doomscrollr_spec_v1.md` as the controlling implementation
+      contract.
 - [x] `V1-002` Keep v2/v3 specs as future planning only.
 - [x] `V1-003` Remove or hide v1-excluded product surface from the current app:
   - GIF search
@@ -36,12 +41,14 @@ Goal: ship a SFW, mobile-first product that validates WhatsApp sharing and focus
   - age verification
   - hot/top ranking
   - saved posts/collections
-- [x] `V1-004` Add contract tests or schema tests that catch v1-excluded fields/providers returning through public APIs.
+- [x] `V1-004` Add contract tests or schema tests that catch v1-excluded fields/providers returning
+      through public APIs.
 - [x] `V1-005` Update README and docs whenever implementation scope changes.
 
 ### 2. Reset Data And Shared Contracts
 
-- [x] `V1-006` Decide whether local database history can be reset or needs cleanup migrations. _(clean wipe: drop the `postgres_data` volume + single rewritten `0001` migration.)_
+- [x] `V1-006` Decide whether local database history can be reset or needs cleanup migrations.
+      _(clean wipe: drop the `postgres_data` volume + single rewritten `0001` migration.)_
 - [x] `V1-007` Add app-side UUIDv7 internal id generation.
 - [x] `V1-008` Add public code generation for posts and comments.
 - [x] `V1-009` Add slug generation for readable post URLs.
@@ -83,11 +90,13 @@ Goal: ship a SFW, mobile-first product that validates WhatsApp sharing and focus
 - [x] `V1-017` Stop exposing internal database ids in public URLs or API contracts.
 - [x] `V1-018` Keep recent feed keyset pagination with `created_at + id`.
 - [x] `V1-019` Return safe unavailable pages for removed or missing posts.
-- [ ] `V1-020` Push block filters into feed/comment SQL when blocking is implemented. _(partial: feed/profile/post-detail filter blocked authors in SQL; comment-list filtering still pending.)_
+- [x] `V1-020` Push block filters into feed/comment SQL when blocking is implemented. _(feed,
+      profile, post-detail, and comment-list filters are SQL-backed; covered by E2E.)_
 
 ### 4. Preview-First Sharing
 
-- [x] `V1-021` Add Hono handlers for `GET /p/:postCode` and `GET /p/:postCode/:slug` before any SPA fallback.
+- [x] `V1-021` Add Hono handlers for `GET /p/:postCode` and `GET /p/:postCode/:slug` before any SPA
+      fallback.
 - [x] `V1-022` Resolve the post server-side and return initial HTML with post-specific metadata.
 - [x] `V1-023` Include required Open Graph tags:
   - `og:title`
@@ -99,8 +108,10 @@ Goal: ship a SFW, mobile-first product that validates WhatsApp sharing and focus
 - [x] `V1-025` Use absolute URLs for all OG links/images.
 - [x] `V1-026` Use safe generic preview images for text and unavailable posts.
 - [x] `V1-027` Use YouTube thumbnails for YouTube/Shorts posts.
-- [x] `V1-028` Validate external image URLs before using them as `og:image`; fallback when unsafe or unavailable.
-- [x] `V1-029` Add curl acceptance checks proving WhatsApp metadata exists without JavaScript. _(verified live; not yet a committed automated test.)_
+- [x] `V1-028` Validate external image URLs before using them as `og:image`; fallback when unsafe or
+      unavailable.
+- [x] `V1-029` Add curl acceptance checks proving WhatsApp metadata exists without JavaScript.
+      _(verified live; not yet a committed automated test.)_
 
 ### 5. Auth And Local Users
 
@@ -149,7 +160,8 @@ Goal: ship a SFW, mobile-first product that validates WhatsApp sharing and focus
 - [x] `V1-055` Add WhatsApp share, copy link, and native share controls.
 - [x] `V1-056` Fire share/open events from the frontend.
 - [x] `V1-057` Add basic event ingestion rate limits.
-- [ ] `V1-058` Add simple SQL/script reporting for the v1 funnel.
+- [x] `V1-058` Add simple SQL/script reporting for the v1 funnel. _(`deno task report:funnel`
+      summarizes creation, event counts, and top posts.)_
 
 ### 8. Comments And Reactions
 
@@ -179,7 +191,8 @@ Goal: ship a SFW, mobile-first product that validates WhatsApp sharing and focus
 - [x] `V1-076` Implement user blocking:
   - `POST /api/users/:username/block`
   - `DELETE /api/users/:username/block`
-- [ ] `V1-077` Hide blocked users' posts and comments from the blocker. _(partial: posts hidden; comment-list filtering pending — see `V1-020`.)_
+- [x] `V1-077` Hide blocked users' posts and comments from the blocker. _(posts and comments are
+      covered by E2E.)_
 - [x] `V1-078` Prevent blocked users from commenting on blocker-owned posts.
 - [x] `V1-079` Prevent blocked users from replying to blocker-owned comments.
 - [x] `V1-080` Add basic rate limits for:
@@ -195,11 +208,14 @@ Goal: ship a SFW, mobile-first product that validates WhatsApp sharing and focus
 - [x] `V1-081` Make the mobile feed single-column-first and recent-only.
 - [x] `V1-082` Make post detail pages optimized around share, comment, and react.
 - [x] `V1-083` Add signed-out states that preserve read access.
-- [x] `V1-084` Add loading, empty, error, removed-post, and blocked-user states. _(loading/empty/error/removed done; blocked handled via SQL filtering + block control.)_
+- [x] `V1-084` Add loading, empty, error, removed-post, and blocked-user states.
+      _(loading/empty/error/removed done; blocked handled via SQL filtering + block control.)_
 - [x] `V1-085` Add report and block UI.
 - [x] `V1-086` Remove v1-excluded navigation and placeholders.
-- [ ] `V1-087` Validate `/p/:postCode` and `/p/:postCode/:slug` on desktop and mobile. _(desktop verified via headless browser; mobile pass pending.)_
-- [ ] `V1-088` Run smoke checks for: _(OG curl, share/open events, and all read paths verified; the authenticated UI flow needs an interactive Clerk login.)_
+- [x] `V1-087` Validate `/p/:postCode` and `/p/:postCode/:slug` on desktop and mobile. _(covered by
+      browser E2E plus OG E2E.)_
+- [x] `V1-088` Run smoke checks for: _(API E2E plus mobile browser smoke using the gated test-auth
+      seam.)_
   - sign in
   - choose username
   - create each v1 post kind
@@ -214,7 +230,8 @@ Goal: ship a SFW, mobile-first product that validates WhatsApp sharing and focus
 
 ### 11. V1 Validation Run
 
-- [x] `V1-089` Seed a small set of SFW posts. _(dev seed: 4 users, 4 tags, 5 posts, comments; refresh for the live run.)_
+- [x] `V1-089` Seed a small set of SFW posts. _(dev seed: 4 users, 4 tags, 5 posts, comments;
+      refresh for the live run.)_
 - [ ] `V1-090` Invite a small tester group.
 - [ ] `V1-091` Ask creators to create posts and share canonical URLs to WhatsApp.
 - [ ] `V1-092` Measure:
@@ -228,7 +245,10 @@ Goal: ship a SFW, mobile-first product that validates WhatsApp sharing and focus
   - new users after opening shared posts
   - creators returning after comments/reactions
   - friends creating their own posts
-- [ ] `V1-093` Collect feedback on creation, previews, mobile reading, commenting, reporting, and blocking.
+  - _Quantitative counters are available through `deno task report:funnel`; live-run interpretation
+    still requires real tester traffic._
+- [ ] `V1-093` Collect feedback on creation, previews, mobile reading, commenting, reporting, and
+      blocking.
 - [ ] `V1-094` Decide whether to iterate v1 or open v2 planning.
 
 ## V2: Earned Milestone
@@ -282,7 +302,8 @@ Goal: strengthen retention, safety, and sharing only after v1 proves the loop.
   - moderator
   - admin
 - [ ] `V2-014` Consider BELL short links only if canonical URLs are too long or attribution matters.
-- [ ] `V2-015` Consider suggestive non-NSFW content only after user controls and moderation capacity exist.
+- [ ] `V2-015` Consider suggestive non-NSFW content only after user controls and moderation capacity
+      exist.
 - [ ] `V2-016` Consider one additional media provider only if users request it repeatedly.
 
 ### Still Not V2 By Default
@@ -297,7 +318,8 @@ Goal: strengthen retention, safety, and sharing only after v1 proves the loop.
 
 ## V3: Earned Platform Target
 
-Goal: expand into platform infrastructure only after v1 and v2 prove retention, sharing, moderation capacity, and demand.
+Goal: expand into platform infrastructure only after v1 and v2 prove retention, sharing, moderation
+capacity, and demand.
 
 ### V3 Gate
 
@@ -349,7 +371,8 @@ Goal: expand into platform infrastructure only after v1 and v2 prove retention, 
   - optimization variants
   - media worker
   - cleanup jobs
-- [ ] `V3-015` Keep text, external image, YouTube, comments, and feeds working if DOOM is unavailable.
+- [ ] `V3-015` Keep text, external image, YouTube, comments, and feeds working if DOOM is
+      unavailable.
 - [ ] `V3-016` Add providers one at a time; do not add GIPHY and Tenor together by default.
 - [ ] `V3-017` Add stronger ranking only if recent feed is insufficient:
   - cheap hot query first if possible

@@ -13,11 +13,15 @@ import { reportsRoutes } from "./routes/reports.routes.ts";
 import { usersRoutes } from "./routes/users.routes.ts";
 
 export const app = new Hono();
+const DEFAULT_CORS_ORIGINS = ["http://localhost:5173", "http://127.0.0.1:5173"];
+const configuredWebOrigin = Deno.env.get("WEB_ORIGIN");
 
 app.use(
   "*",
   cors({
-    origin: ["http://localhost:5173", "http://127.0.0.1:5173"],
+    origin: configuredWebOrigin
+      ? [...new Set([...DEFAULT_CORS_ORIGINS, configuredWebOrigin])]
+      : DEFAULT_CORS_ORIGINS,
     allowMethods: ["GET", "POST", "DELETE", "OPTIONS"],
     allowHeaders: ["authorization", "content-type", "x-request-id"],
     credentials: true,

@@ -30,7 +30,9 @@ const sql = postgres(databaseUrl, { max: 1 });
 const userIdByUsername = new Map(mockUsers.map((user) => [user.username, generateId()]));
 const tagIdBySlug = new Map(mockTags.map((tag) => [tag.slug, generateId()]));
 const postIdByKey = new Map(mockPosts.map((post) => [post.key, generateId()]));
-const postIdByPublicCode = new Map(mockPosts.map((post) => [post.publicCode, postIdByKey.get(post.key)!]));
+const postIdByPublicCode = new Map(
+  mockPosts.map((post) => [post.publicCode, postIdByKey.get(post.key)!]),
+);
 const commentIdByKey = new Map(mockComments.map((comment) => [comment.key, generateId()]));
 const commentIdByPublicCode = new Map(
   mockComments.map((comment) => [comment.publicCode, commentIdByKey.get(comment.key)!]),

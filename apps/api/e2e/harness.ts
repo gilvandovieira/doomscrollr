@@ -71,6 +71,8 @@ export const COMMENTS = {
   reply: "c7Rn3Tb8Wx", // by lucas, reply to topLevel
 } as const;
 
+export const TEST_AUTH_STORAGE_KEY = "doomscrollr.e2eClerkId";
+
 export const TAGS = ["programming", "internet", "memes", "music"] as const;
 
 // --- Harness setup -----------------------------------------------------------
@@ -98,7 +100,9 @@ async function startHarness(): Promise<Harness> {
   Deno.env.set("E2E_AUTH", "1");
   Deno.env.set("DATABASE_URL", testUrl);
   Deno.env.set("PUBLIC_BASE_URL", "http://localhost:8000");
-  Deno.env.set("WEB_ORIGIN", "http://localhost:5173");
+  if (!Deno.env.get("WEB_ORIGIN")) {
+    Deno.env.set("WEB_ORIGIN", "http://localhost:5173");
+  }
   Deno.env.set("LOG_LEVEL", "fatal");
   // Guarantee the real Clerk path is never reachable from a test run.
   Deno.env.delete("CLERK_SECRET_KEY");
