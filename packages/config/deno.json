@@ -1,0 +1,13 @@
+{
+  "name": "@doomscrollr/config",
+  "exports": {
+    "./env": "./src/env.ts"
+  },
+  "tasks": {
+    "check": "deno check src/env.ts",
+    "test": "deno test --allow-env src"
+  },
+  "imports": {
+    "zod": "npm:zod@^3.25.76"
+  }
+}

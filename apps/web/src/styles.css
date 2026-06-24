@@ -1,0 +1,82 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color: #181512;
+  background: #f5f1e8;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  min-width: 320px;
+  scroll-behavior: smooth;
+}
+
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  margin: 0;
+  background:
+    linear-gradient(90deg, rgba(24, 21, 18, 0.05) 1px, transparent 1px),
+    linear-gradient(180deg, rgba(24, 21, 18, 0.04) 1px, transparent 1px),
+    #f5f1e8;
+  background-size: 22px 22px;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+textarea:focus-visible {
+  outline: 3px solid #28bdd2;
+  outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+@layer components {
+  .hard-panel {
+    @apply border-2 border-ink bg-paper shadow-hard;
+  }
+
+  .tool-button {
+    @apply inline-flex h-10 min-w-10 items-center justify-center gap-2 border-2 border-ink bg-paper px-3 text-sm font-black uppercase text-ink transition hover:-translate-y-0.5 hover:bg-signal active:translate-y-0;
+  }
+
+  .icon-button {
+    @apply inline-flex h-10 w-10 items-center justify-center border-2 border-ink bg-paper text-ink transition hover:-translate-y-0.5 hover:bg-signal active:translate-y-0;
+  }
+
+  .feed-card {
+    @apply overflow-hidden border-2 border-ink bg-paper shadow-hard;
+    content-visibility: auto;
+    contain-intrinsic-size: 420px;
+  }
+}

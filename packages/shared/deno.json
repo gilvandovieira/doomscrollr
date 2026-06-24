@@ -1,0 +1,21 @@
+{
+  "name": "@doomscrollr/shared",
+  "exports": {
+    "./constants": "./src/constants.ts",
+    "./mock-data": "./src/mock-data.ts",
+    "./types": "./src/types.ts",
+    "./schemas/comment": "./src/schemas/comment.schema.ts",
+    "./schemas/media": "./src/schemas/media.schema.ts",
+    "./schemas/pagination": "./src/schemas/pagination.schema.ts",
+    "./schemas/post": "./src/schemas/post.schema.ts",
+    "./schemas/report": "./src/schemas/report.schema.ts",
+    "./schemas/user": "./src/schemas/user.schema.ts"
+  },
+  "tasks": {
+    "check": "deno check src/types.ts src/mock-data.ts",
+    "test": "deno test src"
+  },
+  "imports": {
+    "zod": "npm:zod@^3.25.76"
+  }
+}

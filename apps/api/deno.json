@@ -1,0 +1,20 @@
+{
+  "name": "@doomscrollr/api",
+  "exports": {
+    ".": "./src/main.ts"
+  },
+  "tasks": {
+    "dev": "deno run --watch --allow-net --allow-env --allow-sys=hostname src/main.ts",
+    "start": "deno run --allow-net --allow-env --allow-sys=hostname src/main.ts",
+    "check": "deno check src/main.ts",
+    "test": "deno test --allow-env src"
+  },
+  "imports": {
+    "@doomscrollr/config/": "../../packages/config/src/",
+    "@doomscrollr/shared/": "../../packages/shared/src/",
+    "hono": "npm:hono@^4.8.12",
+    "hono/cors": "npm:hono@^4.8.12/cors",
+    "pino": "npm:pino@^9.7.0",
+    "zod": "npm:zod@^3.25.76"
+  }
+}

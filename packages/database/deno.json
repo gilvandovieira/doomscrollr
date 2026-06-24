@@ -1,0 +1,13 @@
+{
+  "name": "@doomscrollr/database",
+  "exports": {
+    "./schema": "./src/schema.ts"
+  },
+  "tasks": {
+    "check": "deno check src/schema.ts",
+    "test": "deno test src"
+  },
+  "imports": {
+    "drizzle-orm/pg-core": "npm:drizzle-orm@^0.44.5/pg-core"
+  }
+}
