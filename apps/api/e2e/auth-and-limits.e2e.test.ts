@@ -133,3 +133,65 @@ e2eTest("report rate limit returns 429 after the window budget is spent", async 
     `all ${LIMIT} reports within budget should succeed, got ${statuses.join(",")}`,
   );
 });
+
+e2eTest("mention rules reject missing users and too many unique mentions", async () => {
+  const missing = await api<ErrorBody>(`/api/posts/${POSTS.fridayText.code}/comments`, {
+    asUser: USERS.ren.clerkId,
+    body: { bodyText: "Looping in @ghostuser for this one." },
+  });
+  assertStatus(missing, 400);
+  assertEquals(missing.json.error.code, "BAD_REQUEST");
+
+  const usernames = ["mone", "mtwo", "mthree", "mfour", "mfive", "msix"];
+  for (const username of usernames) {
+    const claim = await api("/api/account/username", {
+      asUser: `clerk_e2e_${username}`,
+      body: { username },
+    });
+    assertStatus(claim, 201);
+  }
+
+  const excessive = await api<ErrorBody>(`/api/posts/${POSTS.fridayText.code}/comments`, {
+    asUser: USERS.ren.clerkId,
+    body: { bodyText: usernames.map((username) => `@${username}`).join(" ") },
+  });
+  assertStatus(excessive, 400);
+  assertEquals(excessive.json.error.code, "BAD_REQUEST");
+});
+
+e2eTest("mention fan-out has its own hourly rate limit", async () => {
+  const actor = "clerk_e2e_mention_limiter";
+  const actorClaim = await api("/api/account/username", {
+    asUser: actor,
+    body: { username: "mentioner" },
+  });
+  assertStatus(actorClaim, 201);
+
+  const targets = ["rateone", "ratetwo", "ratethree", "ratefour", "ratefive"];
+  for (const username of targets) {
+    const claim = await api("/api/account/username", {
+      asUser: `clerk_e2e_${username}`,
+      body: { username },
+    });
+    assertStatus(claim, 201);
+  }
+
+  const body = targets.map((username) => `@${username}`).join(" ");
+  const statuses: number[] = [];
+  for (let i = 0; i < 7; i += 1) {
+    const res = await api<ErrorBody>(`/api/posts/${POSTS.fridayText.code}/comments`, {
+      asUser: actor,
+      body: { bodyText: `${body} batch ${i}` },
+    });
+    statuses.push(res.status);
+    if (i === 6) {
+      assertEquals(res.status, 429, "request past the mention fan-out budget should be limited");
+      assertEquals(res.json.error.code, "RATE_LIMITED");
+    }
+  }
+
+  assert(
+    statuses.slice(0, 6).every((status) => status === 201),
+    `first 30 mention deliveries should succeed, got ${statuses.join(",")}`,
+  );
+});

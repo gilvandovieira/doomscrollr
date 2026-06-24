@@ -1,6 +1,7 @@
 import { Outlet, useLocation } from "@tanstack/react-router";
 import { HAS_CLERK, HAS_TEST_AUTH } from "../app/auth.ts";
 import { BottomNav } from "./BottomNav.tsx";
+import { DiscoveryRail } from "./DiscoveryRail.tsx";
 import { Header } from "./Header.tsx";
 import { SideRail } from "./SideRail.tsx";
 import { UsernameGate } from "./UsernameGate.tsx";
@@ -14,6 +15,7 @@ export function AppLayout() {
         {(HAS_CLERK || HAS_TEST_AUTH) && <UsernameGate />}
         <PageTransitionOutlet />
       </main>
+      <DiscoveryRail />
       <BottomNav />
     </div>
   );
@@ -32,6 +34,7 @@ function PageTransitionOutlet() {
 
 function getRouteMotion(pathname: string) {
   if (pathname === "/create") return "compose";
+  if (pathname.startsWith("/tags")) return "tags";
   if (pathname.startsWith("/p/")) return "post";
   if (pathname.startsWith("/@")) return "profile";
   if (pathname.startsWith("/admin")) return "admin";

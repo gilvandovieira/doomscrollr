@@ -108,6 +108,22 @@ export async function getCommentRefByCode(
   return { id: row.id, postId: row.postId };
 }
 
+export async function getCommentNotificationRefByCode(
+  commentCode: string,
+): Promise<{ id: string; postId: string; authorId: string; publicCode: string } | null> {
+  const rows = await requireDb()
+    .select({
+      id: comments.id,
+      postId: comments.postId,
+      authorId: comments.authorId,
+      publicCode: comments.publicCode,
+    })
+    .from(comments)
+    .where(eq(comments.publicCode, commentCode))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
 async function generateUniqueCommentCode(): Promise<string> {
   const database = requireDb();
   for (let attempt = 0; attempt < 10; attempt += 1) {

@@ -57,9 +57,14 @@ async function renderPostPage(c: Context) {
 // Only trust an external image as og:image if it is publicly fetchable and an
 // allowed image type; otherwise the generic preview is used (spec §11.3).
 async function resolveExternalOgImage(post: FeedPost): Promise<string | undefined> {
-  if (post.postKind !== "external_image" || !post.imageUrl) return undefined;
-  const check = await checkImageIsFetchable(post.imageUrl);
-  return check.ok ? post.imageUrl : undefined;
+  const imageUrl = post.postKind === "external_image" && post.imageUrl
+    ? post.imageUrl
+    : post.repostOf?.postKind === "external_image" && post.repostOf.imageUrl
+    ? post.repostOf.imageUrl
+    : null;
+  if (!imageUrl) return undefined;
+  const check = await checkImageIsFetchable(imageUrl);
+  return check.ok ? imageUrl : undefined;
 }
 
 pageRoutes.get("/:postCode/:slug", renderPostPage);

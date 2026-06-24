@@ -6,8 +6,7 @@ export const DEFAULT_FEED_LIMIT = 20;
 export const MAX_FEED_LIMIT = 50;
 
 // Public codes use a URL-safe alphabet that avoids confusing characters (spec §7.2).
-export const PUBLIC_CODE_ALPHABET =
-  "23456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+export const PUBLIC_CODE_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 export const PUBLIC_CODE_LENGTH = 10;
 
 // Usernames: 3-24 chars, lowercase letters, numbers, underscore (spec §6.3).
@@ -32,6 +31,7 @@ export const RESERVED_USERNAMES = [
   "help",
   "terms",
   "privacy",
+  "notifications",
 ] as const;
 
 // Post fields (spec §8.2).
@@ -42,6 +42,10 @@ export const POST_BODY_MAX_LENGTH = 10_000;
 // Comment body (spec §8.3).
 export const COMMENT_MIN_LENGTH = 1;
 export const COMMENT_MAX_LENGTH = 2000;
+
+// Mentions (v2). Unique valid @username mentions are capped per comment so a
+// single comment cannot fan out notifications to a large group.
+export const MAX_MENTIONS_PER_COMMENT = 5;
 
 // Curated tags (spec §8.7).
 export const TAG_SLUG_REGEX = /^[a-z0-9-]{2,32}$/;

@@ -25,6 +25,7 @@
     "build:web": "deno task --cwd apps/web build",
     "db:migrate": "deno task --filter @doomscrollr/database migrate",
     "db:seed": "deno task --filter @doomscrollr/database seed",
+    "db:unseed": "deno task --filter @doomscrollr/database unseed",
     "report:funnel": "deno task --filter @doomscrollr/database report:funnel",
     "check": "deno task --filter @doomscrollr/api check && deno task --filter @doomscrollr/web check && deno task --filter @doomscrollr/config check && deno task --filter @doomscrollr/database check && deno task --filter @doomscrollr/shared check",
     "check:e2e": "deno check apps/api/e2e/*.e2e.test.ts",

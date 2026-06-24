@@ -9,6 +9,8 @@ export function ProfilePage() {
   const params = useParams({ strict: false }) as { username?: string };
   const username = params.username ?? "";
   const handle = username.replace(/^@/, "");
+  const getToken = useAuthToken();
+  const signedIn = useIsSignedIn();
 
   const userQuery = useQuery({
     queryKey: ["user", handle],
@@ -16,8 +18,8 @@ export function ProfilePage() {
     enabled: username.startsWith("@"),
   });
   const postsQuery = useQuery({
-    queryKey: ["user-posts", handle],
-    queryFn: () => fetchUserPosts(handle),
+    queryKey: ["user-posts", handle, signedIn],
+    queryFn: () => fetchUserPosts(handle, getToken),
     enabled: username.startsWith("@"),
   });
 

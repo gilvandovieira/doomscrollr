@@ -8,8 +8,14 @@ import type {
 } from "./schemas/comment.schema.ts";
 import type { ClientEventTypeSchema, CreateEventSchema } from "./schemas/event.schema.ts";
 import type {
+  NotificationListResponseSchema,
+  NotificationSchema,
+  NotificationTypeSchema,
+} from "./schemas/notification.schema.ts";
+import type {
   CreatePostResponseSchema,
   CreatePostSchema,
+  CreateQuotePostSchema,
   FeedPostSchema,
   FeedResponseSchema,
   PostDetailSchema,
@@ -19,11 +25,32 @@ import type {
 } from "./schemas/post.schema.ts";
 import type { ReactionResultSchema, SetReactionSchema } from "./schemas/reaction.schema.ts";
 import type {
+  AdminReportListQuerySchema,
+  BulkReportActionSchema,
+  CreateModerationNoteSchema,
   CreateReportSchema,
+  ModerationAuditActionSchema,
+  ModerationAuditEventSchema,
+  ModerationAuditListResponseSchema,
+  ModerationNoteSchema,
+  ReportReasonSchema,
   ReportSchema,
   ReportStatusSchema,
   ReportTargetTypeSchema,
+  SetUserModerationStatusSchema,
 } from "./schemas/report.schema.ts";
+import type {
+  AdminTagListResponseSchema,
+  AdminTagSchema,
+  CreateAdminTagSchema,
+  CreateTagAliasSchema,
+  MergeTagSchema,
+  TagDetailResponseSchema,
+  TagListResponseSchema,
+  TagSchema,
+  TagSlugSchema,
+  TagStatusSchema,
+} from "./schemas/tag.schema.ts";
 import type {
   AuthorSchema,
   SetUsernameSchema,
@@ -45,6 +72,7 @@ export type PostDetail = z.infer<typeof PostDetailSchema>;
 export type FeedResponse = z.infer<typeof FeedResponseSchema>;
 export type RecentFeedQuery = z.infer<typeof RecentFeedQuerySchema>;
 export type CreatePostInput = z.infer<typeof CreatePostSchema>;
+export type CreateQuotePostInput = z.infer<typeof CreateQuotePostSchema>;
 export type CreatePostResponse = z.infer<typeof CreatePostResponseSchema>;
 
 export type CommentStatus = z.infer<typeof CommentStatusSchema>;
@@ -59,7 +87,31 @@ export type ReactionResult = z.infer<typeof ReactionResultSchema>;
 export type ClientEventType = z.infer<typeof ClientEventTypeSchema>;
 export type CreateEventInput = z.infer<typeof CreateEventSchema>;
 
+export type NotificationType = z.infer<typeof NotificationTypeSchema>;
+export type Notification = z.infer<typeof NotificationSchema>;
+export type NotificationListResponse = z.infer<typeof NotificationListResponseSchema>;
+
 export type ReportTargetType = z.infer<typeof ReportTargetTypeSchema>;
 export type ReportStatus = z.infer<typeof ReportStatusSchema>;
+export type ReportReason = z.infer<typeof ReportReasonSchema>;
 export type Report = z.infer<typeof ReportSchema>;
 export type CreateReportInput = z.infer<typeof CreateReportSchema>;
+export type AdminReportListQuery = z.infer<typeof AdminReportListQuerySchema>;
+export type CreateModerationNoteInput = z.infer<typeof CreateModerationNoteSchema>;
+export type BulkReportActionInput = z.infer<typeof BulkReportActionSchema>;
+export type SetUserModerationStatusInput = z.infer<typeof SetUserModerationStatusSchema>;
+export type ModerationNote = z.infer<typeof ModerationNoteSchema>;
+export type ModerationAuditAction = z.infer<typeof ModerationAuditActionSchema>;
+export type ModerationAuditEvent = z.infer<typeof ModerationAuditEventSchema>;
+export type ModerationAuditListResponse = z.infer<typeof ModerationAuditListResponseSchema>;
+
+export type TagSlug = z.infer<typeof TagSlugSchema>;
+export type TagStatus = z.infer<typeof TagStatusSchema>;
+export type Tag = z.infer<typeof TagSchema>;
+export type TagListResponse = z.infer<typeof TagListResponseSchema>;
+export type TagDetailResponse = z.infer<typeof TagDetailResponseSchema>;
+export type AdminTag = z.infer<typeof AdminTagSchema>;
+export type AdminTagListResponse = z.infer<typeof AdminTagListResponseSchema>;
+export type CreateAdminTagInput = z.infer<typeof CreateAdminTagSchema>;
+export type CreateTagAliasInput = z.infer<typeof CreateTagAliasSchema>;
+export type MergeTagInput = z.infer<typeof MergeTagSchema>;

@@ -6,6 +6,7 @@ import type {
   FeedResponse,
   PostDetail,
   Report,
+  Tag,
   UserProfile,
 } from "./types.ts";
 
@@ -31,10 +32,38 @@ export type MockUser = {
 };
 
 export const mockUsers: MockUser[] = [
-  { username: "lucas", displayName: "Lucas", avatarUrl: avatar("lucas"), role: "admin", status: "active", createdAtHoursOffset: 0 },
-  { username: "maya", displayName: "Maya", avatarUrl: avatar("maya"), role: "user", status: "active", createdAtHoursOffset: 1 },
-  { username: "ren", displayName: "Ren", avatarUrl: avatar("ren"), role: "user", status: "active", createdAtHoursOffset: 2 },
-  { username: "ana", displayName: "Ana", avatarUrl: avatar("ana"), role: "user", status: "active", createdAtHoursOffset: 3 },
+  {
+    username: "lucas",
+    displayName: "Lucas",
+    avatarUrl: avatar("lucas"),
+    role: "admin",
+    status: "active",
+    createdAtHoursOffset: 0,
+  },
+  {
+    username: "maya",
+    displayName: "Maya",
+    avatarUrl: avatar("maya"),
+    role: "user",
+    status: "active",
+    createdAtHoursOffset: 1,
+  },
+  {
+    username: "ren",
+    displayName: "Ren",
+    avatarUrl: avatar("ren"),
+    role: "user",
+    status: "active",
+    createdAtHoursOffset: 2,
+  },
+  {
+    username: "ana",
+    displayName: "Ana",
+    avatarUrl: avatar("ana"),
+    role: "user",
+    status: "active",
+    createdAtHoursOffset: 3,
+  },
 ];
 
 function avatar(seed: string): string {
@@ -54,21 +83,29 @@ export const mockTags: MockTag[] = [
   { slug: "music", displayName: "Music", description: "Songs, clips, and shorts." },
 ];
 
+export const mockTagAliases: { aliasSlug: string; targetSlug: string }[] = [
+  { aliasSlug: "dev", targetSlug: "programming" },
+  { aliasSlug: "web", targetSlug: "internet" },
+];
+
 export type MockPost = {
   key: string;
   publicCode: string;
   slug: string;
-  postKind: "text" | "external_image" | "youtube";
+  postKind: "text" | "external_image" | "youtube" | "repost" | "quote";
   title: string;
   bodyText: string | null;
   imageUrl: string | null;
   youtubeUrl: string | null;
   youtubeVideoId: string | null;
   youtubeIsShort: boolean;
+  repostOfKey: string | null;
   status: "published" | "removed";
   score: number;
   reactionCount: number;
   commentCount: number;
+  repostCount: number;
+  quoteCount: number;
   reportCount: number;
   authorUsername: string;
   tags: string[]; // tag slugs
@@ -88,10 +125,13 @@ export const mockPosts: MockPost[] = [
     youtubeUrl: null,
     youtubeVideoId: null,
     youtubeIsShort: false,
+    repostOfKey: null,
     status: "published",
     score: 128,
     reactionCount: 134,
     commentCount: 2,
+    repostCount: 0,
+    quoteCount: 0,
     reportCount: 0,
     authorUsername: "lucas",
     tags: ["programming"],
@@ -109,10 +149,13 @@ export const mockPosts: MockPost[] = [
     youtubeUrl: null,
     youtubeVideoId: null,
     youtubeIsShort: false,
+    repostOfKey: null,
     status: "published",
     score: 92,
     reactionCount: 96,
     commentCount: 0,
+    repostCount: 0,
+    quoteCount: 0,
     reportCount: 0,
     authorUsername: "maya",
     tags: ["internet"],
@@ -129,10 +172,13 @@ export const mockPosts: MockPost[] = [
     youtubeUrl: null,
     youtubeVideoId: null,
     youtubeIsShort: false,
+    repostOfKey: null,
     status: "published",
     score: 204,
     reactionCount: 211,
     commentCount: 0,
+    repostCount: 0,
+    quoteCount: 0,
     reportCount: 0,
     authorUsername: "ren",
     tags: ["programming", "memes"],
@@ -149,10 +195,13 @@ export const mockPosts: MockPost[] = [
     youtubeUrl: "https://www.youtube.com/shorts/jNQXAC9IVRw",
     youtubeVideoId: "jNQXAC9IVRw",
     youtubeIsShort: true,
+    repostOfKey: null,
     status: "published",
     score: 156,
     reactionCount: 160,
     commentCount: 0,
+    repostCount: 0,
+    quoteCount: 0,
     reportCount: 0,
     authorUsername: "ana",
     tags: ["music"],
@@ -169,10 +218,13 @@ export const mockPosts: MockPost[] = [
     youtubeUrl: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
     youtubeVideoId: "dQw4w9WgXcQ",
     youtubeIsShort: false,
+    repostOfKey: null,
     status: "published",
     score: 77,
     reactionCount: 80,
     commentCount: 0,
+    repostCount: 0,
+    quoteCount: 0,
     reportCount: 0,
     authorUsername: "maya",
     tags: ["internet", "music"],
@@ -256,6 +308,9 @@ function authorFor(username: string): Author {
 }
 
 function toFeedPost(post: MockPost): FeedPost {
+  const repostOf = post.repostOfKey
+    ? mockPosts.find((candidate) => candidate.key === post.repostOfKey) ?? null
+    : null;
   return {
     publicCode: post.publicCode,
     slug: post.slug,
@@ -270,7 +325,10 @@ function toFeedPost(post: MockPost): FeedPost {
     score: post.score,
     reactionCount: post.reactionCount,
     commentCount: post.commentCount,
+    repostCount: post.repostCount,
+    quoteCount: post.quoteCount,
     author: authorFor(post.authorUsername),
+    repostOf: repostOf ? toEmbeddedPost(repostOf) : null,
     tags: post.tags,
     canonicalPath: canonicalPath(post.publicCode, post.slug),
     createdAt: hoursAgo(post.hoursAgo),
@@ -278,8 +336,42 @@ function toFeedPost(post: MockPost): FeedPost {
   };
 }
 
-function publishedPostsRecent(): MockPost[] {
-  return [...mockPosts]
+function toEmbeddedPost(post: MockPost): NonNullable<FeedPost["repostOf"]> {
+  return {
+    publicCode: post.publicCode,
+    slug: post.slug,
+    postKind: post.postKind,
+    title: post.title,
+    bodyText: post.bodyText,
+    imageUrl: post.imageUrl,
+    youtubeUrl: post.youtubeUrl,
+    youtubeVideoId: post.youtubeVideoId,
+    youtubeIsShort: post.youtubeIsShort,
+    author: authorFor(post.authorUsername),
+    canonicalPath: canonicalPath(post.publicCode, post.slug),
+  };
+}
+
+function tagPostCount(slug: string): number {
+  return mockPosts.filter((post) => post.status === "published" && post.tags.includes(slug)).length;
+}
+
+function toTag(tag: MockTag): Tag {
+  return {
+    slug: tag.slug,
+    displayName: tag.displayName,
+    description: tag.description,
+    postCount: tagPostCount(tag.slug),
+  };
+}
+
+function resolveMockTagSlug(slug: string): string | null {
+  if (mockTags.some((tag) => tag.slug === slug)) return slug;
+  return mockTagAliases.find((alias) => alias.aliasSlug === slug)?.targetSlug ?? null;
+}
+
+function publishedPostsRecent(posts: MockPost[] = mockPosts): MockPost[] {
+  return [...posts]
     .filter((post) => post.status === "published")
     .sort((a, b) =>
       Date.parse(hoursAgo(a.hoursAgo)) === Date.parse(hoursAgo(b.hoursAgo))
@@ -302,8 +394,11 @@ function decodeCursor(cursor: string | undefined) {
   }
 }
 
-export function getMockFeed(options: { limit: number; cursor?: string }): FeedResponse {
-  const sorted = publishedPostsRecent();
+function getMockFeedFromPosts(
+  posts: MockPost[],
+  options: { limit: number; cursor?: string },
+): FeedResponse {
+  const sorted = publishedPostsRecent(posts);
   const cursor = decodeCursor(options.cursor);
 
   const startIndex = cursor
@@ -324,6 +419,34 @@ export function getMockFeed(options: { limit: number; cursor?: string }): FeedRe
       ? encodeCursor({ createdAt: hoursAgo(last.hoursAgo), id: last.publicCode })
       : null,
   };
+}
+
+export function getMockTags(): Tag[] {
+  return mockTags.map(toTag).sort((a, b) =>
+    b.postCount - a.postCount || a.displayName.localeCompare(b.displayName)
+  );
+}
+
+export function getMockTagBySlug(slug: string): Tag | null {
+  const canonical = resolveMockTagSlug(slug);
+  const tag = canonical ? mockTags.find((candidate) => candidate.slug === canonical) : undefined;
+  return tag ? toTag(tag) : null;
+}
+
+export function getMockFeed(options: { limit: number; cursor?: string }): FeedResponse {
+  return getMockFeedFromPosts(mockPosts, options);
+}
+
+export function getMockFeedByTag(
+  slug: string,
+  options: { limit: number; cursor?: string },
+): FeedResponse {
+  const canonical = resolveMockTagSlug(slug);
+  if (!canonical) return { items: [], nextCursor: null };
+  return getMockFeedFromPosts(
+    mockPosts.filter((post) => post.tags.includes(canonical)),
+    options,
+  );
 }
 
 export function getMockPostByCode(publicCode: string): PostDetail | null {

@@ -1,4 +1,4 @@
-import { PostCard } from "./PostCard.tsx";
+import { InfinitePostList } from "./InfinitePostList.tsx";
 import { useRecentFeed } from "./useFeedQuery.ts";
 
 export function FeedPage() {
@@ -40,19 +40,12 @@ export function FeedPage() {
         <h1 className="mobile-title">Fresh posts</h1>
       </div>
 
-      <div className="space-y-3">
-        {posts.map((post, index) => <PostCard key={post.publicCode} post={post} index={index} />)}
-      </div>
-      {feed.hasNextPage && (
-        <button
-          type="button"
-          className="tool-button w-full"
-          onClick={() => feed.fetchNextPage()}
-          disabled={feed.isFetchingNextPage}
-        >
-          {feed.isFetchingNextPage ? "Loading…" : "Load more"}
-        </button>
-      )}
+      <InfinitePostList
+        posts={posts}
+        hasNextPage={feed.hasNextPage}
+        isFetchingNextPage={feed.isFetchingNextPage}
+        fetchNextPage={feed.fetchNextPage}
+      />
     </section>
   );
 }

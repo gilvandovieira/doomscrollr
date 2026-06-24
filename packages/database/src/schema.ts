@@ -21,11 +21,23 @@ import type { AnyPgColumn } from "drizzle-orm/pg-core";
 
 export const userRole = pgEnum("user_role", ["user", "admin"]);
 export const userStatus = pgEnum("user_status", ["active", "limited", "suspended", "banned"]);
-export const postKind = pgEnum("post_kind", ["text", "external_image", "youtube"]);
+export const postKind = pgEnum("post_kind", [
+  "text",
+  "external_image",
+  "youtube",
+  "repost",
+  "quote",
+]);
 export const postStatus = pgEnum("post_status", ["published", "removed"]);
 export const commentStatus = pgEnum("comment_status", ["published", "removed"]);
 export const reportTargetType = pgEnum("report_target_type", ["post", "comment", "user"]);
 export const reportStatus = pgEnum("report_status", ["open", "dismissed", "actioned"]);
+export const notificationType = pgEnum("notification_type", [
+  "post_reply",
+  "comment_reply",
+  "mention",
+  "moderation_outcome",
+]);
 
 const timestamps = {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -59,6 +71,9 @@ export const posts = pgTable("posts", {
   youtubeUrl: text("youtube_url"),
   youtubeVideoId: text("youtube_video_id"),
   youtubeIsShort: boolean("youtube_is_short").notNull().default(false),
+  repostOfPostId: uuid("repost_of_post_id").references((): AnyPgColumn => posts.id, {
+    onDelete: "cascade",
+  }),
   status: postStatus("status").notNull().default("published"),
   removalReason: text("removal_reason"),
   removedByUserId: uuid("removed_by_user_id").references(() => users.id),
@@ -66,6 +81,8 @@ export const posts = pgTable("posts", {
   score: integer("score").notNull().default(0),
   reactionCount: integer("reaction_count").notNull().default(0),
   commentCount: integer("comment_count").notNull().default(0),
+  repostCount: integer("repost_count").notNull().default(0),
+  quoteCount: integer("quote_count").notNull().default(0),
   reportCount: integer("report_count").notNull().default(0),
   ...timestamps,
 }, (table) => [
@@ -82,19 +99,40 @@ export const posts = pgTable("posts", {
       AND ${table.imageUrl} IS NULL
       AND ${table.youtubeUrl} IS NULL
       AND ${table.youtubeVideoId} IS NULL
+      AND ${table.repostOfPostId} IS NULL
     ) OR (
       ${table.postKind} = 'external_image'
       AND ${table.bodyText} IS NULL
       AND ${table.imageUrl} IS NOT NULL
       AND ${table.youtubeUrl} IS NULL
       AND ${table.youtubeVideoId} IS NULL
+      AND ${table.repostOfPostId} IS NULL
     ) OR (
       ${table.postKind} = 'youtube'
       AND ${table.bodyText} IS NULL
       AND ${table.youtubeUrl} IS NOT NULL
       AND ${table.youtubeVideoId} IS NOT NULL
       AND ${table.imageUrl} IS NULL
+      AND ${table.repostOfPostId} IS NULL
+    ) OR (
+      ${table.postKind} = 'repost'
+      AND ${table.bodyText} IS NULL
+      AND ${table.imageUrl} IS NULL
+      AND ${table.youtubeUrl} IS NULL
+      AND ${table.youtubeVideoId} IS NULL
+      AND ${table.repostOfPostId} IS NOT NULL
+    ) OR (
+      ${table.postKind} = 'quote'
+      AND ${table.bodyText} IS NOT NULL
+      AND length(trim(${table.bodyText})) > 0
+      AND ${table.imageUrl} IS NULL
+      AND ${table.youtubeUrl} IS NULL
+      AND ${table.youtubeVideoId} IS NULL
+      AND ${table.repostOfPostId} IS NOT NULL
     )`,
+  ),
+  index("posts_repost_target_idx").on(table.repostOfPostId).where(
+    sql`${table.repostOfPostId} IS NOT NULL`,
   ),
 ]);
 
@@ -153,6 +191,52 @@ export const reports = pgTable("reports", {
   index("reports_status_idx").on(table.status),
 ]);
 
+export const moderationNotes = pgTable("moderation_notes", {
+  id: uuid("id").primaryKey(),
+  targetType: reportTargetType("target_type").notNull(),
+  targetId: uuid("target_id").notNull(),
+  targetCode: text("target_code").notNull(),
+  authorUserId: uuid("author_user_id").notNull().references(() => users.id),
+  bodyText: text("body_text").notNull(),
+  ...timestamps,
+}, (table) => [
+  index("moderation_notes_target_created_idx").on(
+    table.targetType,
+    table.targetId,
+    table.createdAt,
+  ),
+  check("moderation_notes_body_length", sql`length(trim(${table.bodyText})) BETWEEN 1 AND 1000`),
+]);
+
+export const moderationAuditEvents = pgTable("moderation_audit_events", {
+  id: uuid("id").primaryKey(),
+  actorUserId: uuid("actor_user_id").notNull().references(() => users.id),
+  action: text("action").notNull(),
+  targetType: reportTargetType("target_type").notNull(),
+  targetId: uuid("target_id").notNull(),
+  targetCode: text("target_code").notNull(),
+  reportId: uuid("report_id").references(() => reports.id, { onDelete: "set null" }),
+  reason: text("reason"),
+  metadata: jsonb("metadata").notNull().default(sql`'{}'::jsonb`),
+  createdAt: timestamps.createdAt,
+}, (table) => [
+  index("moderation_audit_created_idx").on(table.createdAt, table.id),
+  index("moderation_audit_target_idx").on(table.targetType, table.targetId, table.createdAt),
+  check(
+    "moderation_audit_action",
+    sql`${table.action} IN (
+      'post_removed',
+      'post_restored',
+      'comment_removed',
+      'comment_restored',
+      'report_dismissed',
+      'report_actioned',
+      'note_created',
+      'user_status_changed'
+    )`,
+  ),
+]);
+
 export const userBlocks = pgTable("user_blocks", {
   blockerUserId: uuid("blocker_user_id").notNull().references(() => users.id, {
     onDelete: "cascade",
@@ -179,6 +263,14 @@ export const tags = pgTable("tags", {
   check("tags_slug_format", sql`${table.slug} ~ '^[a-z0-9-]{2,32}$'`),
 ]);
 
+export const tagAliases = pgTable("tag_aliases", {
+  aliasSlug: text("alias_slug").primaryKey(),
+  targetTagId: uuid("target_tag_id").notNull().references(() => tags.id, { onDelete: "cascade" }),
+  createdAt: timestamps.createdAt,
+}, (table) => [
+  check("tag_aliases_slug_format", sql`${table.aliasSlug} ~ '^[a-z0-9-]{2,32}$'`),
+]);
+
 export const postTags = pgTable("post_tags", {
   postId: uuid("post_id").notNull().references(() => posts.id, { onDelete: "cascade" }),
   tagId: uuid("tag_id").notNull().references(() => tags.id, { onDelete: "cascade" }),
@@ -199,5 +291,32 @@ export const postEvents = pgTable("post_events", {
   index("post_events_post_idx").on(table.postId, table.createdAt),
   index("post_events_anon_idx").on(table.anonSessionId, table.createdAt).where(
     sql`${table.anonSessionId} IS NOT NULL`,
+  ),
+]);
+
+export const notifications = pgTable("notifications", {
+  id: uuid("id").primaryKey(),
+  recipientUserId: uuid("recipient_user_id").notNull().references(() => users.id, {
+    onDelete: "cascade",
+  }),
+  actorUserId: uuid("actor_user_id").references(() => users.id, { onDelete: "set null" }),
+  type: notificationType("type").notNull(),
+  postId: uuid("post_id").references(() => posts.id, { onDelete: "cascade" }),
+  commentId: uuid("comment_id").references(() => comments.id, { onDelete: "cascade" }),
+  metadata: jsonb("metadata"),
+  readAt: timestamp("read_at", { withTimezone: true }),
+  createdAt: timestamps.createdAt,
+}, (table) => [
+  index("notifications_recipient_created_idx").on(
+    table.recipientUserId,
+    table.createdAt,
+    table.id,
+  ),
+  index("notifications_unread_idx").on(table.recipientUserId, table.createdAt).where(
+    sql`${table.readAt} IS NULL`,
+  ),
+  check(
+    "notifications_distinct_actor",
+    sql`${table.actorUserId} IS NULL OR ${table.actorUserId} <> ${table.recipientUserId}`,
   ),
 ]);

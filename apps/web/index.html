@@ -9,7 +9,8 @@
     <!-- Installable app shell -->
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="icon" href="/icon.svg" type="image/svg+xml" />
-    <link rel="apple-touch-icon" href="/icon.svg" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta name="application-name" content="Doomscrollr" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
@@ -21,9 +22,95 @@
     <link
       rel="stylesheet"
       href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&display=swap"
+      media="print"
+      onload="this.media='all'"
     />
+    <noscript>
+      <link
+        rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&display=swap"
+      />
+    </noscript>
 
     <title>Doomscrollr</title>
+
+    <!-- Critical shell styles: paint a branded loading screen instantly, before
+         the JS bundle or the main stylesheet arrive (matters most on slow links). -->
+    <style>
+      :root {
+        color-scheme: light;
+        --boot-bg: #fbfbfd;
+        --boot-fg: #14151a;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme="light"]) {
+          color-scheme: dark;
+          --boot-bg: #0f1014;
+          --boot-fg: #edeef2;
+        }
+      }
+      :root[data-theme="dark"] {
+        color-scheme: dark;
+        --boot-bg: #0f1014;
+        --boot-fg: #edeef2;
+      }
+      html,
+      body {
+        margin: 0;
+        background: var(--boot-bg);
+        color: var(--boot-fg);
+      }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial,
+          sans-serif;
+      }
+      .app-boot {
+        display: flex;
+        min-height: 100vh;
+        min-height: 100dvh;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 1.1rem;
+        /* Stay invisible at first; only reveal if the app is still booting after a
+           beat. A fast/cached load mounts React (replacing #root) before this delay
+           elapses, so a normal refresh never flashes the loader. */
+        opacity: 0;
+        animation: app-boot-reveal 0.2s ease 0.5s forwards;
+      }
+      @keyframes app-boot-reveal {
+        to {
+          opacity: 1;
+        }
+      }
+      .app-boot__mark {
+        display: grid;
+        width: 3rem;
+        height: 3rem;
+        place-items: center;
+        border-radius: 0.85rem;
+        background: #5b5bf0;
+        color: #fff;
+      }
+      .app-boot__spin {
+        width: 1.4rem;
+        height: 1.4rem;
+        border-radius: 50%;
+        border: 2.5px solid rgba(91, 91, 240, 0.3);
+        border-top-color: #5b5bf0;
+        animation: app-boot-spin 0.7s linear infinite;
+      }
+      @keyframes app-boot-spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .app-boot__spin {
+          animation: none;
+        }
+      }
+    </style>
 
     <!-- Set the theme before first paint so there is no light/dark flash. -->
     <script>
@@ -42,7 +129,18 @@
     </script>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <!-- Instant app shell; React replaces it on mount. -->
+      <div class="app-boot">
+        <span class="app-boot__mark">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="m6 9 6 6 6-6" />
+            <path d="m6 4 6 6 6-6" />
+          </svg>
+        </span>
+        <span class="app-boot__spin" role="status" aria-label="Loading Doomscrollr"></span>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

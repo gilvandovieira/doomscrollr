@@ -2,6 +2,7 @@ import type {
   Author,
   Comment,
   FeedPost,
+  FeedPost as PublicFeedPost,
   PostKind,
   PostStatus,
   ReplyComment,
@@ -29,13 +30,18 @@ export type FeedPostRow = {
   youtubeUrl: string | null;
   youtubeVideoId: string | null;
   youtubeIsShort: boolean;
+  repostOfPostId: string | null;
   status: PostStatus;
   score: number;
   reactionCount: number;
   commentCount: number;
+  repostCount: number;
+  quoteCount: number;
   createdAt: Date;
   author: AuthorRow;
 };
+
+export type EmbeddedPost = PublicFeedPost["repostOf"];
 
 export type CommentRow = {
   id: string;
@@ -72,6 +78,7 @@ export function toFeedPost(
   row: FeedPostRow,
   tags: string[],
   viewerReaction: 1 | -1 | null = null,
+  repostOf: EmbeddedPost = null,
 ): FeedPost {
   return {
     publicCode: row.publicCode,
@@ -87,11 +94,30 @@ export function toFeedPost(
     score: row.score,
     reactionCount: row.reactionCount,
     commentCount: row.commentCount,
+    repostCount: row.repostCount,
+    quoteCount: row.quoteCount,
     author: toAuthor(row.author),
+    repostOf,
     tags,
     canonicalPath: canonicalPath(row.publicCode, row.slug),
     createdAt: row.createdAt.toISOString(),
     viewerReaction,
+  };
+}
+
+export function toEmbeddedPost(row: FeedPostRow): NonNullable<EmbeddedPost> {
+  return {
+    publicCode: row.publicCode,
+    slug: row.slug,
+    postKind: row.postKind,
+    title: row.title,
+    bodyText: row.bodyText,
+    imageUrl: row.imageUrl,
+    youtubeUrl: row.youtubeUrl,
+    youtubeVideoId: row.youtubeVideoId,
+    youtubeIsShort: row.youtubeIsShort,
+    author: toAuthor(row.author),
+    canonicalPath: canonicalPath(row.publicCode, row.slug),
   };
 }
 

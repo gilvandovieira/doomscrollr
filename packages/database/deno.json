@@ -4,10 +4,11 @@
     "./schema": "./src/schema.ts"
   },
   "tasks": {
-    "check": "deno check src/schema.ts src/migrate.ts src/seed.ts src/funnel-report.ts",
+    "check": "deno check src/schema.ts src/migrate.ts src/seed.ts src/unseed.ts src/funnel-report.ts",
     "migrate": "deno run --env-file=../../.env.local --allow-env --allow-net --allow-read src/migrate.ts",
     "report:funnel": "deno run --env-file=../../.env.local --allow-env --allow-net src/funnel-report.ts",
     "seed": "deno run --env-file=../../.env.local --allow-env --allow-net src/seed.ts",
+    "unseed": "deno run --env-file=../../.env.local --allow-env --allow-net src/unseed.ts",
     "test": "deno test src"
   },
   "imports": {

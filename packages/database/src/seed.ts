@@ -2,6 +2,7 @@ import {
   mockComments,
   mockPosts,
   mockReports,
+  mockTagAliases,
   mockTags,
   mockUsers,
 } from "@doomscrollr/shared/mock-data.ts";
@@ -80,6 +81,13 @@ try {
           now(),
           now()
         )
+      `;
+    }
+
+    for (const alias of mockTagAliases) {
+      await tx`
+        INSERT INTO tag_aliases (alias_slug, target_tag_id, created_at)
+        VALUES (${alias.aliasSlug}, ${tagIdBySlug.get(alias.targetSlug)!}, now())
       `;
     }
 

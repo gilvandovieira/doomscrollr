@@ -1,11 +1,17 @@
-import { posts, postTags, tags, users } from "@doomscrollr/database/schema.ts";
+import { postReactions, posts, postTags, tags, users } from "@doomscrollr/database/schema.ts";
 import { generateId, generatePublicCode } from "@doomscrollr/shared/lib/ids.ts";
 import { slugify } from "@doomscrollr/shared/lib/slug.ts";
 import { RecentCursorSchema } from "@doomscrollr/shared/schemas/pagination.schema.ts";
-import type { FeedPost, FeedResponse, PostDetail, PostKind } from "@doomscrollr/shared/types.ts";
+import type {
+  FeedPost,
+  FeedResponse,
+  PostDetail,
+  PostKind,
+  PostStatus,
+} from "@doomscrollr/shared/types.ts";
 import { and, desc, eq, inArray, lt, or, type SQL, sql } from "drizzle-orm";
 import { db } from "../db/client.ts";
-import { type FeedPostRow, toFeedPost } from "./transformers.ts";
+import { type EmbeddedPost, type FeedPostRow, toEmbeddedPost, toFeedPost } from "./transformers.ts";
 
 function requireDb() {
   if (!db) throw new Error("Database is not configured.");
@@ -31,10 +37,13 @@ function basePostSelect() {
       youtubeUrl: posts.youtubeUrl,
       youtubeVideoId: posts.youtubeVideoId,
       youtubeIsShort: posts.youtubeIsShort,
+      repostOfPostId: posts.repostOfPostId,
       status: posts.status,
       score: posts.score,
       reactionCount: posts.reactionCount,
       commentCount: posts.commentCount,
+      repostCount: posts.repostCount,
+      quoteCount: posts.quoteCount,
       createdAt: posts.createdAt,
       author: authorColumns,
     })
@@ -48,6 +57,24 @@ function notBlocked(viewerId: string): SQL {
   return sql`NOT EXISTS (
     SELECT 1 FROM user_blocks b
     WHERE b.blocker_user_id = ${viewerId} AND b.blocked_user_id = ${posts.authorId}
+  )`;
+}
+
+function targetPublishedAndVisible(viewerId?: string): SQL {
+  const blockFilter = viewerId
+    ? sql`AND NOT EXISTS (
+      SELECT 1 FROM user_blocks b
+      WHERE b.blocker_user_id = ${viewerId} AND b.blocked_user_id = target.author_id
+    )`
+    : sql``;
+
+  return sql`(
+    ${posts.repostOfPostId} IS NULL OR EXISTS (
+      SELECT 1 FROM posts target
+      WHERE target.id = ${posts.repostOfPostId}
+        AND target.status = 'published'
+        ${blockFilter}
+    )
   )`;
 }
 
@@ -82,10 +109,46 @@ function decodeCursor(cursor: string | undefined) {
   }
 }
 
-async function buildFeedResponse(rows: FeedPostRow[], limit: number): Promise<FeedResponse> {
+async function repostTargetsById(
+  rows: FeedPostRow[],
+  viewerId?: string,
+): Promise<Map<string, EmbeddedPost>> {
+  const targetIds = [...new Set(rows.map((row) => row.repostOfPostId).filter(Boolean))] as string[];
+  const map = new Map<string, EmbeddedPost>();
+  if (targetIds.length === 0) return map;
+
+  const filters: SQL[] = [inArray(posts.id, targetIds), eq(posts.status, "published")];
+  if (viewerId) filters.push(notBlocked(viewerId));
+
+  const targetRows = await basePostSelect()
+    .where(and(...filters));
+
+  for (const row of targetRows as FeedPostRow[]) {
+    map.set(row.id, toEmbeddedPost(row));
+  }
+  return map;
+}
+
+async function buildFeedPosts(rows: FeedPostRow[], viewerId?: string): Promise<FeedPost[]> {
+  const tagMap = await tagSlugsByPostId(rows.map((row) => row.id));
+  const repostTargetMap = await repostTargetsById(rows, viewerId);
+  return rows.map((row) =>
+    toFeedPost(
+      row,
+      tagMap.get(row.id) ?? [],
+      null,
+      row.repostOfPostId ? repostTargetMap.get(row.repostOfPostId) ?? null : null,
+    )
+  );
+}
+
+async function buildFeedResponse(
+  rows: FeedPostRow[],
+  limit: number,
+  viewerId?: string,
+): Promise<FeedResponse> {
   const page = rows.slice(0, limit);
-  const tagMap = await tagSlugsByPostId(page.map((row) => row.id));
-  const items = page.map((row) => toFeedPost(row, tagMap.get(row.id) ?? []));
+  const items = await buildFeedPosts(page, viewerId);
   const last = page[page.length - 1];
 
   return {
@@ -101,7 +164,7 @@ export async function listRecentFeed(
   viewerId?: string,
 ): Promise<FeedResponse> {
   const cursor = decodeCursor(query.cursor);
-  const filters: SQL[] = [eq(posts.status, "published")];
+  const filters: SQL[] = [eq(posts.status, "published"), targetPublishedAndVisible(viewerId)];
 
   if (viewerId) filters.push(notBlocked(viewerId));
   if (cursor) {
@@ -119,33 +182,69 @@ export async function listRecentFeed(
     .orderBy(desc(posts.createdAt), desc(posts.id))
     .limit(query.limit + 1);
 
-  return buildFeedResponse(rows as FeedPostRow[], query.limit);
+  return buildFeedResponse(rows as FeedPostRow[], query.limit, viewerId);
+}
+
+export async function listRecentFeedByTagId(
+  tagId: string,
+  query: { limit: number; cursor?: string },
+  viewerId?: string,
+): Promise<FeedResponse> {
+  const cursor = decodeCursor(query.cursor);
+  const filters: SQL[] = [
+    eq(posts.status, "published"),
+    eq(postTags.tagId, tagId),
+    targetPublishedAndVisible(viewerId),
+  ];
+
+  if (viewerId) filters.push(notBlocked(viewerId));
+  if (cursor) {
+    const cursorDate = new Date(cursor.createdAt);
+    filters.push(
+      or(
+        lt(posts.createdAt, cursorDate),
+        and(eq(posts.createdAt, cursorDate), lt(posts.id, cursor.id)),
+      )!,
+    );
+  }
+
+  const rows = await basePostSelect()
+    .innerJoin(postTags, eq(postTags.postId, posts.id))
+    .where(and(...filters))
+    .orderBy(desc(posts.createdAt), desc(posts.id))
+    .limit(query.limit + 1);
+
+  return buildFeedResponse(rows as FeedPostRow[], query.limit, viewerId);
 }
 
 export async function getPublishedPostByPublicCode(
   publicCode: string,
   viewerId?: string,
 ): Promise<PostDetail | null> {
-  const filters: SQL[] = [eq(posts.publicCode, publicCode), eq(posts.status, "published")];
+  const filters: SQL[] = [
+    eq(posts.publicCode, publicCode),
+    eq(posts.status, "published"),
+    targetPublishedAndVisible(viewerId),
+  ];
   if (viewerId) filters.push(notBlocked(viewerId));
 
   const rows = await basePostSelect().where(and(...filters)).limit(1);
   const row = rows[0] as FeedPostRow | undefined;
   if (!row) return null;
 
-  const tagMap = await tagSlugsByPostId([row.id]);
-  return toFeedPost(row, tagMap.get(row.id) ?? []);
+  return (await buildFeedPosts([row], viewerId))[0] ?? null;
 }
 
 // Used by the server-rendered post page (spec §11). Returns the post regardless of
 // status so the handler can distinguish "removed" (unavailable) from "missing".
 export async function getPostForPublicPageByCode(publicCode: string): Promise<FeedPost | null> {
-  const rows = await basePostSelect().where(eq(posts.publicCode, publicCode)).limit(1);
+  const rows = await basePostSelect()
+    .where(and(eq(posts.publicCode, publicCode), targetPublishedAndVisible()))
+    .limit(1);
   const row = rows[0] as FeedPostRow | undefined;
   if (!row) return null;
 
-  const tagMap = await tagSlugsByPostId([row.id]);
-  return toFeedPost(row, tagMap.get(row.id) ?? []);
+  return (await buildFeedPosts([row]))[0] ?? null;
 }
 
 export async function listPostsByUsername(
@@ -160,7 +259,11 @@ export async function listPostsByUsername(
   const user = userRows[0];
   if (!user) return null;
 
-  const filters: SQL[] = [eq(posts.authorId, user.id), eq(posts.status, "published")];
+  const filters: SQL[] = [
+    eq(posts.authorId, user.id),
+    eq(posts.status, "published"),
+    targetPublishedAndVisible(viewerId),
+  ];
   if (viewerId) filters.push(notBlocked(viewerId));
 
   const rows = await basePostSelect()
@@ -168,9 +271,8 @@ export async function listPostsByUsername(
     .orderBy(desc(posts.createdAt), desc(posts.id))
     .limit(30);
 
-  const tagMap = await tagSlugsByPostId((rows as FeedPostRow[]).map((row) => row.id));
   return {
-    items: (rows as FeedPostRow[]).map((row) => toFeedPost(row, tagMap.get(row.id) ?? [])),
+    items: await buildFeedPosts(rows as FeedPostRow[], viewerId),
     nextCursor: null,
   };
 }
@@ -192,6 +294,60 @@ export async function getPostOwnerById(postId: string): Promise<string | null> {
     .where(eq(posts.id, postId))
     .limit(1);
   return rows[0]?.authorId ?? null;
+}
+
+export async function getReshareTargetByPublicCode(
+  publicCode: string,
+): Promise<{ id: string; authorId: string; title: string; status: PostStatus } | null> {
+  const rows = await requireDb()
+    .select({
+      id: posts.id,
+      authorId: posts.authorId,
+      title: posts.title,
+      status: posts.status,
+    })
+    .from(posts)
+    .where(eq(posts.publicCode, publicCode))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+export async function hasPublishedRepost(
+  authorId: string,
+  repostOfPostId: string,
+): Promise<boolean> {
+  const rows = await requireDb()
+    .select({ id: posts.id })
+    .from(posts)
+    .where(
+      and(
+        eq(posts.authorId, authorId),
+        eq(posts.repostOfPostId, repostOfPostId),
+        eq(posts.postKind, "repost"),
+        eq(posts.status, "published"),
+      ),
+    )
+    .limit(1);
+  return rows.length > 0;
+}
+
+export async function getPostModerationTargetByCode(
+  publicCode: string,
+): Promise<
+  { id: string; authorId: string; publicCode: string; slug: string; title: string } | null
+> {
+  const rows = await requireDb()
+    .select({
+      id: posts.id,
+      authorId: posts.authorId,
+      publicCode: posts.publicCode,
+      slug: posts.slug,
+      title: posts.title,
+    })
+    .from(posts)
+    .where(eq(posts.publicCode, publicCode))
+    .limit(1);
+  return rows[0] ?? null;
 }
 
 // Admin moderation (spec §14). Returns true if a matching post was updated.
@@ -229,18 +385,6 @@ export async function restorePostByCode(publicCode: string): Promise<boolean> {
   return rows.length > 0;
 }
 
-// Resolve requested tag slugs to active curated tag ids (spec §8.7). Unknown or
-// disabled tags are simply absent from the result; the caller validates the count.
-export async function getActiveTagsBySlugs(
-  slugs: string[],
-): Promise<{ id: string; slug: string }[]> {
-  if (slugs.length === 0) return [];
-  return await requireDb()
-    .select({ id: tags.id, slug: tags.slug })
-    .from(tags)
-    .where(and(inArray(tags.slug, slugs), eq(tags.status, "active")));
-}
-
 async function generateUniquePostCode(): Promise<string> {
   const database = requireDb();
   for (let attempt = 0; attempt < 10; attempt += 1) {
@@ -264,6 +408,7 @@ export type CreatePostFields = {
   youtubeUrl?: string | null;
   youtubeVideoId?: string | null;
   youtubeIsShort?: boolean;
+  repostOfPostId?: string | null;
   tagIds: string[];
 };
 
@@ -288,6 +433,17 @@ export async function createPost(
       youtubeUrl: fields.youtubeUrl ?? null,
       youtubeVideoId: fields.youtubeVideoId ?? null,
       youtubeIsShort: fields.youtubeIsShort ?? false,
+      repostOfPostId: fields.repostOfPostId ?? null,
+      // The author implicitly endorses their own post (Reddit-style): it opens at
+      // one point with the author's upvote, which they can later remove.
+      score: 1,
+      reactionCount: 1,
+    });
+
+    await tx.insert(postReactions).values({
+      userId: fields.authorId,
+      postId: id,
+      value: 1,
     });
 
     if (fields.tagIds.length > 0) {
@@ -296,6 +452,22 @@ export async function createPost(
         .update(tags)
         .set({ postCount: sql`${tags.postCount} + 1`, updatedAt: new Date() })
         .where(inArray(tags.id, fields.tagIds));
+    }
+
+    const counterUpdate = fields.postKind === "repost"
+      ? { repostCount: sql`${posts.repostCount} + 1` }
+      : fields.postKind === "quote"
+      ? { quoteCount: sql`${posts.quoteCount} + 1` }
+      : null;
+
+    if (fields.repostOfPostId && counterUpdate) {
+      await tx
+        .update(posts)
+        .set({
+          ...counterUpdate,
+          updatedAt: new Date(),
+        })
+        .where(eq(posts.id, fields.repostOfPostId));
     }
   });
 

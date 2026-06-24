@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { House, PenSquare } from "lucide-react";
+import { Hash, House } from "lucide-react";
 
 // Mobile bottom tab bar. Hidden on desktop (the rail takes over) via CSS.
 export function BottomNav() {
@@ -16,12 +16,12 @@ export function BottomNav() {
           Recent
         </Link>
         <Link
-          to="/create"
+          to="/tags"
           className="bottom-nav__item"
           activeProps={{ className: "bottom-nav__item bottom-nav__item--active" }}
         >
-          <PenSquare aria-hidden="true" size={20} strokeWidth={2.25} />
-          Create
+          <Hash aria-hidden="true" size={20} strokeWidth={2.25} />
+          Tags
         </Link>
       </div>
     </nav>

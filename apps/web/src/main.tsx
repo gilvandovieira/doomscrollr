@@ -3,6 +3,7 @@ import { RouterProvider } from "@tanstack/react-router";
 import React from "react";
 import { createRoot } from "react-dom/client";
 import { CLERK_PUBLISHABLE_KEY, HAS_CLERK } from "./app/auth.ts";
+import { registerPwaServiceWorker } from "./app/pwa.ts";
 import { queryClient } from "./app/query-client.ts";
 import { router } from "./app/router.tsx";
 import "./styles.css";
@@ -41,3 +42,5 @@ if (HAS_CLERK && CLERK_PUBLISHABLE_KEY) {
 } else {
   root.render(app);
 }
+
+registerPwaServiceWorker();

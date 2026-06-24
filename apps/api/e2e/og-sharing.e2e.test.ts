@@ -3,7 +3,10 @@
 // preview never depends on client-side React. We assert with plain fetch — by
 // definition no JavaScript runs — which is exactly what a crawler sees.
 
+import type { PostDetail } from "@doomscrollr/shared/types.ts";
 import { api, assert, assertIncludes, assertStatus, e2eTest, POSTS } from "./harness.ts";
+
+type CreatePostResponse = { post: PostDetail; canonicalUrl: string };
 
 function assertHtml(contentType: string | null): void {
   assert(
@@ -64,6 +67,37 @@ e2eTest("youtube post uses the video thumbnail as og:image", async () => {
     '<meta property="og:image" content="https://i.ytimg.com/vi/jNQXAC9IVRw/hqdefault.jpg"',
     "youtube og:image",
   );
+});
+
+e2eTest("quote post page renders quote body and embedded target without JS", async () => {
+  const clerkId = "clerk_e2e_ogquoter";
+  const quoteBody = "Quote pages should preview my note before the shared source.";
+
+  const claimed = await api("/api/account/username", {
+    asUser: clerkId,
+    body: { username: "ogquoter" },
+  });
+  assertStatus(claimed, 201);
+
+  const quote = await api<CreatePostResponse>(`/api/posts/${POSTS.fridayText.code}/quotes`, {
+    asUser: clerkId,
+    body: { bodyText: quoteBody },
+  });
+  assertStatus(quote, 201);
+
+  const res = await api(`/p/${quote.json.post.publicCode}/${quote.json.post.slug}`, {
+    headers: { "user-agent": "WhatsApp/2.23" },
+  });
+  assertStatus(res, 200);
+  assertHtml(res.headers.get("content-type"));
+  assertIncludes(
+    res.text,
+    `<meta property="og:description" content="${quoteBody}"`,
+    "quote og:description",
+  );
+  assertIncludes(res.text, quoteBody, "rendered quote body");
+  assertIncludes(res.text, "shared from @lucas", "rendered embedded byline");
+  assertIncludes(res.text, "When prod breaks on Friday", "rendered embedded title");
 });
 
 e2eTest("unknown post code returns a 404 unavailable page that still carries OG tags", async () => {

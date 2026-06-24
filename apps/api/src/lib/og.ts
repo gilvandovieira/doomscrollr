@@ -50,19 +50,29 @@ export function buildPostOpenGraph(
     image = youtubeThumbnail(post.youtubeVideoId);
   } else if (post.postKind === "external_image" && ogImage) {
     image = ogImage;
+  } else if (post.repostOf?.postKind === "youtube" && post.repostOf.youtubeVideoId) {
+    image = youtubeThumbnail(post.repostOf.youtubeVideoId);
+  } else if (post.repostOf?.postKind === "external_image" && ogImage) {
+    image = ogImage;
   }
-
-  const description = post.postKind === "text" && post.bodyText
-    ? truncate(post.bodyText)
-    : GENERIC_DESCRIPTION;
 
   return {
     title: post.title,
-    description,
+    description: postDescription(post),
     url: canonicalUrl,
     type: "article",
     image,
   };
+}
+
+function postDescription(post: FeedPost): string {
+  if ((post.postKind === "text" || post.postKind === "quote") && post.bodyText) {
+    return truncate(post.bodyText);
+  }
+  if (post.postKind === "repost" && post.repostOf) {
+    return truncate(`Reposted from @${post.repostOf.author.username}: ${post.repostOf.title}`);
+  }
+  return GENERIC_DESCRIPTION;
 }
 
 function metaTags(og: OpenGraph, canonicalUrl: string): string {
@@ -88,6 +98,15 @@ function postPreviewHtml(post: FeedPost, appUrl: string): string {
     media = `<p><a href="${escapeHtml(post.youtubeUrl)}" rel="noopener">Watch on YouTube</a></p>`;
   } else if (post.postKind === "text" && post.bodyText) {
     media = `<p class="body">${escapeHtml(post.bodyText)}</p>`;
+  } else if (post.postKind === "quote" || post.postKind === "repost") {
+    media = [
+      post.postKind === "quote" && post.bodyText
+        ? `<p class="body">${escapeHtml(post.bodyText)}</p>`
+        : "",
+      post.repostOf
+        ? embeddedPostHtml(post.repostOf)
+        : `<p class="embed">Original post unavailable.</p>`,
+    ].join("");
   }
 
   return `
@@ -99,13 +118,33 @@ function postPreviewHtml(post: FeedPost, appUrl: string): string {
       </article>`;
 }
 
+function embeddedPostHtml(post: NonNullable<FeedPost["repostOf"]>): string {
+  let media = "";
+  if (post.postKind === "external_image" && post.imageUrl) {
+    media = `<img src="${escapeHtml(post.imageUrl)}" alt="" loading="lazy" />`;
+  } else if (post.postKind === "youtube" && post.youtubeUrl) {
+    media = `<p><a href="${escapeHtml(post.youtubeUrl)}" rel="noopener">Watch on YouTube</a></p>`;
+  } else if ((post.postKind === "text" || post.postKind === "quote") && post.bodyText) {
+    media = `<p class="body">${escapeHtml(post.bodyText)}</p>`;
+  }
+
+  return `
+        <section class="embed">
+          <p class="byline">shared from @${escapeHtml(post.author.username)}</p>
+          <h2>${escapeHtml(post.title)}</h2>
+          ${media}
+        </section>`;
+}
+
 const SHELL_STYLES =
   `body{margin:0;font-family:system-ui,sans-serif;background:#0b0b0b;color:#f5f5f5;line-height:1.5}` +
   `main{max-width:640px;margin:0 auto;padding:24px}` +
   `h1{font-size:1.6rem;margin:0 0 8px}` +
+  `h2{font-size:1.1rem;margin:0 0 8px}` +
   `.byline{color:#9a9a9a;margin:0 0 16px}` +
   `img{max-width:100%;border-radius:8px}` +
   `.body{white-space:pre-wrap}` +
+  `.embed{border:1px solid #333;border-radius:8px;margin-top:16px;padding:16px}` +
   `.cta{display:inline-block;margin-top:16px;color:#0b0b0b;background:#f5f5f5;padding:10px 16px;border-radius:8px;text-decoration:none;font-weight:600}`;
 
 export function renderPostShellHtml(options: {

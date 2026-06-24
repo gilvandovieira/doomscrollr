@@ -1,20 +1,13 @@
 import { Link } from "@tanstack/react-router";
-import { ChevronsDown, House, PenSquare } from "lucide-react";
-import { AuthControls } from "./AuthControls.tsx";
-import { ThemeToggle } from "./ThemeToggle.tsx";
+import { Hash, House } from "lucide-react";
 
-// Desktop left rail. Hidden on mobile (the top bar + bottom tabs take over) via CSS.
+// Desktop left rail: primary nav. Hidden on mobile; the brand, theme, and auth
+// live in the header, the bottom tab bar handles mobile nav, and discovery
+// (popular tags / communities) lives in the right rail on wide screens.
 export function SideRail() {
   return (
     <aside className="side-rail">
-      <Link to="/" className="brand-mark rail-brand" aria-label="Doomscrollr home">
-        <span className="brand-mark__icon">
-          <ChevronsDown aria-hidden="true" size={20} strokeWidth={2.75} />
-        </span>
-        <span className="brand-mark__word">Doomscrollr</span>
-      </Link>
-
-      <nav className="flex flex-col gap-1" aria-label="Primary">
+      <nav className="rail-nav" aria-label="Primary">
         <Link
           to="/"
           activeOptions={{ exact: true }}
@@ -25,19 +18,14 @@ export function SideRail() {
           Recent
         </Link>
         <Link
-          to="/create"
+          to="/tags"
           className="rail-item"
           activeProps={{ className: "rail-item rail-item--active" }}
         >
-          <PenSquare aria-hidden="true" size={20} strokeWidth={2.25} />
-          Create
+          <Hash aria-hidden="true" size={20} strokeWidth={2.25} />
+          Tags
         </Link>
       </nav>
-
-      <div className="rail-foot">
-        <ThemeToggle />
-        <AuthControls />
-      </div>
     </aside>
   );
 }

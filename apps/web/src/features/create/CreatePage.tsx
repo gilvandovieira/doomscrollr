@@ -1,28 +1,77 @@
 import type { CreatePostInput, PostKind } from "@doomscrollr/shared/types.ts";
+import { MAX_TAGS_PER_POST } from "@doomscrollr/shared/constants.ts";
+import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAuthToken, useIsSignedIn } from "../../app/account.ts";
-import { ApiError, createPost } from "../../app/api.ts";
+import { ApiError, createPost, fetchTags, fetchYouTubeTitle } from "../../app/api.ts";
 
-const TABS: { kind: PostKind; label: string }[] = [
+type CreatablePostKind = Extract<PostKind, "text" | "external_image" | "youtube">;
+
+const TABS: { kind: CreatablePostKind; label: string }[] = [
   { kind: "text", label: "Text" },
   { kind: "external_image", label: "Image link" },
   { kind: "youtube", label: "YouTube" },
 ];
+const URL_PATTERN = /https?:\/\/\S+/i;
+const IMAGE_PATH_PATTERN = /\.(avif|gif|jpe?g|png|webp)$/i;
+const YOUTUBE_HOST_PATTERN = /(^|\.)youtube\.com$|(^|\.)youtu\.be$/i;
+
+type ShareTargetDraft = {
+  kind: CreatablePostKind;
+  title: string;
+  bodyText: string;
+  imageUrl: string;
+  youtubeUrl: string;
+};
 
 export function CreatePage() {
   const signedIn = useIsSignedIn();
   const getToken = useAuthToken();
   const navigate = useNavigate();
+  const [shareDraft] = useState(readShareTargetDraft);
 
-  const [kind, setKind] = useState<PostKind>("text");
-  const [title, setTitle] = useState("");
-  const [bodyText, setBodyText] = useState("");
-  const [imageUrl, setImageUrl] = useState("");
-  const [youtubeUrl, setYoutubeUrl] = useState("");
-  const [tags, setTags] = useState("");
+  const [kind, setKind] = useState<CreatablePostKind>(shareDraft.kind);
+  const [title, setTitle] = useState(shareDraft.title);
+  const [bodyText, setBodyText] = useState(shareDraft.bodyText);
+  const [imageUrl, setImageUrl] = useState(shareDraft.imageUrl);
+  const [youtubeUrl, setYoutubeUrl] = useState(shareDraft.youtubeUrl);
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const tagsQuery = useQuery({
+    queryKey: ["tags"],
+    queryFn: fetchTags,
+    staleTime: 120_000,
+  });
+  const [titleLoading, setTitleLoading] = useState(false);
+  // Tracks whether the user has typed their own title; if so we never overwrite it.
+  const titleTouched = useRef(shareDraft.title.trim().length > 0);
+
+  // Paste a YouTube link and the title fills in from the video (server oEmbed),
+  // debounced. Bails on a stale URL and never clobbers a title the user typed.
+  useEffect(() => {
+    if (kind !== "youtube" || titleTouched.current) return;
+    const url = youtubeUrl.trim();
+    if (!isYouTubeUrl(url)) return;
+
+    let active = true;
+    const handle = setTimeout(() => {
+      setTitleLoading(true);
+      fetchYouTubeTitle(url)
+        .then((fetched) => {
+          if (active && fetched && !titleTouched.current) setTitle(fetched.slice(0, 180));
+        })
+        .finally(() => {
+          if (active) setTitleLoading(false);
+        });
+    }, 600);
+
+    return () => {
+      active = false;
+      clearTimeout(handle);
+    };
+  }, [youtubeUrl, kind]);
 
   if (!signedIn) {
     return (
@@ -34,12 +83,19 @@ export function CreatePage() {
   }
 
   function buildInput(): CreatePostInput {
-    const tagList = tags.split(",").map((t) => t.trim().toLowerCase()).filter(Boolean);
-    if (kind === "text") return { postKind: "text", title, bodyText, tags: tagList };
+    if (kind === "text") return { postKind: "text", title, bodyText, tags: selectedTags };
     if (kind === "external_image") {
-      return { postKind: "external_image", title, imageUrl, tags: tagList };
+      return { postKind: "external_image", title, imageUrl, tags: selectedTags };
     }
-    return { postKind: "youtube", title, youtubeUrl, tags: tagList };
+    return { postKind: "youtube", title, youtubeUrl, tags: selectedTags };
+  }
+
+  function toggleTag(slug: string) {
+    setSelectedTags((current) => {
+      if (current.includes(slug)) return current.filter((tag) => tag !== slug);
+      if (current.length >= MAX_TAGS_PER_POST) return current;
+      return [...current, slug];
+    });
   }
 
   async function submit(event: React.FormEvent) {
@@ -81,13 +137,24 @@ export function CreatePage() {
 
       <form onSubmit={submit} className="hard-panel space-y-3 p-4">
         <Field label="Title">
-          <input
-            value={title}
-            onChange={(event) => setTitle(event.target.value)}
-            placeholder="Say something"
-            className="field-control min-h-11 px-3 text-sm"
-            maxLength={180}
-          />
+          <div className="title-field">
+            <input
+              value={title}
+              onChange={(event) => {
+                setTitle(event.target.value);
+                titleTouched.current = event.target.value.trim().length > 0;
+              }}
+              placeholder="Say something"
+              className="field-control min-h-11 px-3 text-sm"
+              maxLength={180}
+              aria-busy={titleLoading}
+            />
+            {titleLoading && (
+              <span className="title-field__loading" aria-hidden="true">
+                <span className="title-field__bar" />
+              </span>
+            )}
+          </div>
         </Field>
 
         <div key={kind} className="create-kind-fields">
@@ -112,25 +179,52 @@ export function CreatePage() {
             </Field>
           )}
           {kind === "youtube" && (
-            <Field label="YouTube URL">
-              <input
-                value={youtubeUrl}
-                onChange={(event) => setYoutubeUrl(event.target.value)}
-                placeholder="https://www.youtube.com/watch?v=…"
-                className="field-control min-h-11 px-3 text-sm"
-              />
-            </Field>
+            <>
+              <Field label="YouTube URL">
+                <input
+                  value={youtubeUrl}
+                  onChange={(event) => setYoutubeUrl(event.target.value)}
+                  placeholder="https://www.youtube.com/watch?v=…"
+                  className="field-control min-h-11 px-3 text-sm"
+                />
+              </Field>
+              {/* Kept outside the label so it doesn't pollute the input's accessible name. */}
+              <p className="meta-label mt-2" role="status" aria-live="polite">
+                {titleLoading
+                  ? "Fetching the video title…"
+                  : "Paste a link — the title fills in from the video. Edit it above if you like."}
+              </p>
+            </>
           )}
         </div>
 
-        <Field label="Tags (optional, comma separated)">
-          <input
-            value={tags}
-            onChange={(event) => setTags(event.target.value)}
-            placeholder="programming, memes"
-            className="field-control min-h-11 px-3 font-mono text-sm"
-          />
-        </Field>
+        <div className="space-y-2">
+          <div className="flex items-center justify-between gap-3">
+            <span className="meta-label">Tags</span>
+            <span className="meta-label">
+              {selectedTags.length}/{MAX_TAGS_PER_POST}
+            </span>
+          </div>
+          <div className="tag-picker" aria-label="Choose tags">
+            {(tagsQuery.data ?? []).map((tag) => {
+              const selected = selectedTags.includes(tag.slug);
+              const disabled = !selected && selectedTags.length >= MAX_TAGS_PER_POST;
+              return (
+                <button
+                  key={tag.slug}
+                  type="button"
+                  className="tag-picker__option"
+                  aria-pressed={selected}
+                  disabled={disabled}
+                  onClick={() => toggleTag(tag.slug)}
+                >
+                  #{tag.slug}
+                </button>
+              );
+            })}
+            {tagsQuery.isPending && <span className="meta-label">Loading tags...</span>}
+          </div>
+        </div>
 
         {error && <p className="meta-label text-oxide">{error}</p>}
 
@@ -149,4 +243,78 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       {children}
     </label>
   );
+}
+
+function readShareTargetDraft(): ShareTargetDraft {
+  const empty: ShareTargetDraft = {
+    kind: "text",
+    title: "",
+    bodyText: "",
+    imageUrl: "",
+    youtubeUrl: "",
+  };
+  if (typeof location === "undefined") return empty;
+
+  const params = new URLSearchParams(location.search);
+  const sharedTitle = params.get("title")?.trim() ?? "";
+  const sharedText = params.get("text")?.trim() ?? "";
+  const sharedUrl = params.get("url")?.trim() || extractFirstUrl(sharedText);
+  if (!sharedTitle && !sharedText && !sharedUrl) return empty;
+
+  const title = sharedTitle || firstNonUrlLine(sharedText) || "Shared link";
+  if (sharedUrl && isYouTubeUrl(sharedUrl)) {
+    return {
+      ...empty,
+      kind: "youtube",
+      title,
+      bodyText: textWithoutUrl(sharedText),
+      youtubeUrl: sharedUrl,
+    };
+  }
+  if (sharedUrl && isImageUrl(sharedUrl)) {
+    return {
+      ...empty,
+      kind: "external_image",
+      title,
+      bodyText: textWithoutUrl(sharedText),
+      imageUrl: sharedUrl,
+    };
+  }
+
+  return {
+    ...empty,
+    title,
+    bodyText: [textWithoutUrl(sharedText), sharedUrl].filter(Boolean).join("\n\n"),
+  };
+}
+
+function extractFirstUrl(value: string): string {
+  return value.match(URL_PATTERN)?.[0] ?? "";
+}
+
+function firstNonUrlLine(value: string): string {
+  return value
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .find((line) => line && !URL_PATTERN.test(line)) ?? "";
+}
+
+function textWithoutUrl(value: string): string {
+  return value.replace(URL_PATTERN, "").trim();
+}
+
+function isYouTubeUrl(value: string): boolean {
+  try {
+    return YOUTUBE_HOST_PATTERN.test(new URL(value).hostname);
+  } catch {
+    return false;
+  }
+}
+
+function isImageUrl(value: string): boolean {
+  try {
+    return IMAGE_PATH_PATTERN.test(new URL(value).pathname);
+  } catch {
+    return false;
+  }
 }

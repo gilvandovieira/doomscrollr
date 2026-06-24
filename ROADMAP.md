@@ -265,28 +265,29 @@ Goal: strengthen retention, safety, and sharing only after v1 proves the loop.
 
 ### V2 Tasks
 
-- [ ] `V2-006` Improve mobile/PWA polish:
+- [x] `V2-006` Improve mobile/PWA polish:
   - installable manifest
   - app icons
   - better back/forward behavior
   - offline fallback page
   - cached static app shell
   - improved touch/share UX
-- [ ] `V2-007` Strengthen curated tags if v1 tags prove useful:
-  - tag directory
-  - tag pages
-  - admin tag creation/disable
-  - tag aliases/merges
-  - tag moderation on posts
-  - popular tags screen/sidebar
-- [ ] `V2-008` Add in-app notifications:
-  - reply to your post
-  - reply to your comment
-  - mention via `@username`
-  - moderation outcome
-- [ ] `V2-009` Add mention rules and spam limits.
-- [ ] `V2-010` Add reposts/quote posts only after moderation/blocking are solid.
-- [ ] `V2-011` Upgrade moderation:
+- [x] `V2-007` Strengthen curated tags if v1 tags prove useful:
+  - [x] tag directory
+  - [x] tag pages
+  - [x] admin tag creation/disable
+  - [x] tag aliases/merges
+  - [x] tag moderation on posts
+    - _Post creation now uses active curated tags only._
+  - [x] popular tags screen/sidebar
+- [x] `V2-008` Add in-app notifications:
+  - [x] reply to your post
+  - [x] reply to your comment
+  - [x] mention via `@username`
+  - [x] moderation outcome
+- [x] `V2-009` Add mention rules and spam limits.
+- [x] `V2-010` Add reposts/quote posts only after moderation/blocking are solid.
+- [x] `V2-011` Upgrade moderation:
   - report filters
   - bulk dismiss/action
   - moderator notes

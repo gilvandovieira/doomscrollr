@@ -3,12 +3,13 @@
 //   comments (incl. one-level replies) -> reacts.
 // Each assertion is a real request through the full middleware + repository stack.
 
-import type { Comment, FeedPost, PostDetail } from "@doomscrollr/shared/types.ts";
+import type { Comment, FeedPost, Notification, PostDetail } from "@doomscrollr/shared/types.ts";
 import { api, assert, assertEquals, assertStatus, e2eTest, POSTS, USERS } from "./harness.ts";
 
 type FeedResponse = { items: FeedPost[]; nextCursor: string | null };
 type CreatePostResponse = { post: PostDetail; canonicalUrl: string };
 type ReactionResult = { value: 1 | -1 | null; score: number; reactionCount: number };
+type Tag = { slug: string; displayName: string; description: string | null; postCount: number };
 
 e2eTest("health endpoint reports ok", async () => {
   const res = await api<{ status: string; service: string }>("/health");
@@ -30,6 +31,30 @@ e2eTest("recent feed serves seeded posts to anonymous readers", async () => {
   assert(!("authorId" in friday), "public post must not leak internal authorId");
 });
 
+e2eTest("tag directory and tag feeds serve curated discovery pages", async () => {
+  const tags = await api<{ items: Tag[] }>("/api/tags");
+  assertStatus(tags, 200);
+  const programming = tags.json.items.find((tag) => tag.slug === "programming");
+  assert(programming !== undefined, "programming tag should be listed");
+  assertEquals(programming.displayName, "Programming", "tag display name");
+  assertEquals(programming.postCount, 2, "programming seeded post count");
+
+  const detail = await api<{ tag: Tag; requestedSlug: string; canonicalSlug: string }>(
+    "/api/tags/dev",
+  );
+  assertStatus(detail, 200);
+  assertEquals(detail.json.requestedSlug, "dev", "alias requested slug");
+  assertEquals(detail.json.canonicalSlug, "programming", "alias canonical slug");
+
+  const feed = await api<FeedResponse>("/api/tags/programming/posts");
+  assertStatus(feed, 200);
+  assert(feed.json.items.length > 0, "programming feed should have posts");
+  assert(
+    feed.json.items.every((post) => post.tags.includes("programming")),
+    "programming feed should only include posts tagged programming",
+  );
+});
+
 e2eTest("create -> appears in feed -> read -> comment -> reply -> react", async () => {
   // 1. maya creates a text post.
   const created = await api<CreatePostResponse>("/api/posts", {
@@ -44,6 +69,8 @@ e2eTest("create -> appears in feed -> read -> comment -> reply -> react", async 
   assertStatus(created, 201);
   const code = created.json.post.publicCode;
   assertEquals(created.json.post.author.username, "maya", "new post author");
+  assertEquals(created.json.post.score, 1, "new post opens at one point (author self-upvote)");
+  assertEquals(created.json.post.reactionCount, 1, "author self-upvote counts as one reaction");
   assert(
     created.json.canonicalUrl.includes(`/p/${code}/`),
     `canonical url should target the new post, got ${created.json.canonicalUrl}`,
@@ -65,12 +92,55 @@ e2eTest("create -> appears in feed -> read -> comment -> reply -> react", async 
   // 4. ren comments on it.
   const comment = await api<Comment>(`/api/posts/${code}/comments`, {
     asUser: USERS.ren.clerkId,
-    body: { bodyText: "Mine only does it on Fridays." },
+    body: { bodyText: "Mine only does it on Fridays. @lucas has seen this too." },
   });
   assertStatus(comment, 201);
   const commentCode = comment.json.publicCode;
   assertEquals(comment.json.author.username, "ren");
   assertEquals(comment.json.parentCommentCode, null, "top-level comment has no parent");
+
+  const mayaNotifications = await api<{ items: Notification[]; unreadCount: number }>(
+    "/api/notifications",
+    { asUser: USERS.maya.clerkId },
+  );
+  assertStatus(mayaNotifications, 200);
+  const postReplyNotice = mayaNotifications.json.items.find((notification) =>
+    notification.type === "post_reply" &&
+    notification.postCode === code &&
+    notification.commentCode === commentCode &&
+    notification.actor?.username === USERS.ren.username
+  );
+  assert(postReplyNotice !== undefined, "post owner should receive a post reply notification");
+  assert(postReplyNotice.readAt === null, "new post reply notification should be unread");
+
+  const readPostReply = await api(`/api/notifications/${postReplyNotice.id}/read`, {
+    method: "POST",
+    asUser: USERS.maya.clerkId,
+  });
+  assertStatus(readPostReply, 200);
+  const mayaNotificationsAfterRead = await api<{ items: Notification[]; unreadCount: number }>(
+    "/api/notifications",
+    { asUser: USERS.maya.clerkId },
+  );
+  const readNotice = mayaNotificationsAfterRead.json.items.find((notification) =>
+    notification.id === postReplyNotice.id
+  );
+  assert(readNotice?.readAt !== null, "marking a notification read should persist readAt");
+
+  const lucasNotifications = await api<{ items: Notification[]; unreadCount: number }>(
+    "/api/notifications",
+    { asUser: USERS.admin.clerkId },
+  );
+  assertStatus(lucasNotifications, 200);
+  assert(
+    lucasNotifications.json.items.some((notification) =>
+      notification.type === "mention" &&
+      notification.postCode === code &&
+      notification.commentCode === commentCode &&
+      notification.actor?.username === USERS.ren.username
+    ),
+    "mentioned users should receive a mention notification",
+  );
 
   // 5. ana replies to ren (one level deep).
   const reply = await api<Comment>(`/api/posts/${code}/comments`, {
@@ -80,6 +150,21 @@ e2eTest("create -> appears in feed -> read -> comment -> reply -> react", async 
   assertStatus(reply, 201);
   assertEquals(reply.json.parentCommentCode, commentCode, "reply should reference its parent");
 
+  const renNotifications = await api<{ items: Notification[]; unreadCount: number }>(
+    "/api/notifications",
+    { asUser: USERS.ren.clerkId },
+  );
+  assertStatus(renNotifications, 200);
+  assert(
+    renNotifications.json.items.some((notification) =>
+      notification.type === "comment_reply" &&
+      notification.postCode === code &&
+      notification.commentCode === reply.json.publicCode &&
+      notification.actor?.username === USERS.ana.username
+    ),
+    "parent comment author should receive a comment reply notification",
+  );
+
   // 6. The comment thread now nests the reply under the top-level comment.
   const thread = await api<{ items: Comment[] }>(`/api/posts/${code}/comments`);
   assertStatus(thread, 200);
@@ -88,23 +173,40 @@ e2eTest("create -> appears in feed -> read -> comment -> reply -> react", async 
   assertEquals(top.replies.length, 1, "top-level comment should have one reply");
   assertEquals(top.replies[0].author.username, "ana");
 
-  // 7. ana reacts +1 on the post, then clears it.
+  // 7. The post already carries the author's self-upvote, so ana's upvote takes it
+  // to two; clearing hers leaves the author's one behind.
   const up = await api<ReactionResult>(`/api/posts/${code}/reactions`, {
     asUser: USERS.ana.clerkId,
     body: { value: 1 },
   });
   assertStatus(up, 200);
   assertEquals(up.json.value, 1, "reaction value after upvote");
-  assertEquals(up.json.score, 1, "score after a single upvote on a new post");
-  assertEquals(up.json.reactionCount, 1, "reaction count after upvote");
+  assertEquals(up.json.score, 2, "author self-upvote plus ana's upvote");
+  assertEquals(up.json.reactionCount, 2, "reaction count after ana's upvote");
 
   const cleared = await api<ReactionResult>(`/api/posts/${code}/reactions`, {
     asUser: USERS.ana.clerkId,
     body: { value: 0 },
   });
   assertStatus(cleared, 200);
-  assertEquals(cleared.json.value, null, "reaction cleared");
-  assertEquals(cleared.json.score, 0, "score back to zero after clearing");
+  assertEquals(cleared.json.value, null, "ana's reaction cleared");
+  assertEquals(cleared.json.score, 1, "author self-upvote remains after ana clears");
+  assertEquals(cleared.json.reactionCount, 1, "author self-upvote remains in the count");
+});
+
+e2eTest("tag aliases canonicalize on post creation", async () => {
+  const created = await api<CreatePostResponse>("/api/posts", {
+    asUser: USERS.maya.clerkId,
+    body: {
+      postKind: "text",
+      title: "E2E: alias tags should merge",
+      bodyText: "The dev alias should land on programming.",
+      tags: ["dev"],
+    },
+  });
+  assertStatus(created, 201);
+  assertEquals(created.json.post.tags.length, 1, "canonicalized tag count");
+  assertEquals(created.json.post.tags[0], "programming", "alias should store canonical tag");
 });
 
 e2eTest("youtube posts are accepted and expose the parsed video id", async () => {

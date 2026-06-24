@@ -15,6 +15,10 @@ function canonicalUrl(post: FeedPost): string {
 export function ShareControls({ post }: { post: FeedPost }) {
   const [copied, setCopied] = useState(false);
   const url = canonicalUrl(post);
+  const shareData: ShareData = { title: post.title, text: post.title, url };
+  const canUseNativeShare = typeof navigator !== "undefined" &&
+    typeof navigator.share === "function" &&
+    (typeof navigator.canShare !== "function" || navigator.canShare(shareData));
 
   function shareWhatsApp() {
     sendEvent("whatsapp_share_clicked", post.publicCode);
@@ -35,8 +39,8 @@ export function ShareControls({ post }: { post: FeedPost }) {
 
   async function nativeShare() {
     sendEvent("native_share_clicked", post.publicCode);
-    if (navigator.share) {
-      await navigator.share({ title: post.title, url }).catch(() => {});
+    if (canUseNativeShare) {
+      await navigator.share(shareData).catch(() => {});
     }
   }
 
@@ -56,7 +60,7 @@ export function ShareControls({ post }: { post: FeedPost }) {
         {copied ? <Check aria-hidden="true" size={17} /> : <Copy aria-hidden="true" size={17} />}
         {copied ? "Copied" : "Copy link"}
       </button>
-      {typeof navigator !== "undefined" && "share" in navigator && (
+      {canUseNativeShare && (
         <button type="button" onClick={nativeShare} className="icon-button" aria-label="Share">
           <Share2 aria-hidden="true" size={18} />
         </button>

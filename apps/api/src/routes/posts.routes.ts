@@ -1,11 +1,15 @@
 import { readServerEnv } from "@doomscrollr/config/env.ts";
+import { MAX_MENTIONS_PER_COMMENT } from "@doomscrollr/shared/constants.ts";
 import { getMockCommentsForPost, getMockPostByCode } from "@doomscrollr/shared/mock-data.ts";
 import { CreateCommentSchema } from "@doomscrollr/shared/schemas/comment.schema.ts";
-import { CreatePostSchema } from "@doomscrollr/shared/schemas/post.schema.ts";
+import {
+  CreatePostSchema,
+  CreateQuotePostSchema,
+} from "@doomscrollr/shared/schemas/post.schema.ts";
 import { SetReactionSchema } from "@doomscrollr/shared/schemas/reaction.schema.ts";
 import { Hono } from "hono";
 import { hasDatabase } from "../db/client.ts";
-import { badRequest, forbidden, notFound } from "../lib/errors.ts";
+import { badRequest, conflict, forbidden, notFound } from "../lib/errors.ts";
 import { buildCanonicalPostUrl } from "../lib/og.ts";
 import { checkImageIsFetchable, validateExternalImageUrl } from "../lib/image-url.ts";
 import { enforceRateLimit, RATE_LIMITS } from "../lib/rate-limit.ts";
@@ -16,19 +20,24 @@ import { isBlocked } from "../repositories/blocks.repository.ts";
 import {
   createComment,
   getCommentByCode,
+  getCommentNotificationRefByCode,
   getReplyParent,
   listCommentsForPost,
 } from "../repositories/comments.repository.ts";
 import { recordPostEvent } from "../repositories/events.repository.ts";
+import { createNotification } from "../repositories/notifications.repository.ts";
 import {
   createPost,
   type CreatePostFields,
-  getActiveTagsBySlugs,
   getPostIdByPublicCode,
   getPostOwnerById,
   getPublishedPostByPublicCode,
+  getReshareTargetByPublicCode,
+  hasPublishedRepost,
 } from "../repositories/posts.repository.ts";
 import { setPostReaction } from "../repositories/reactions.repository.ts";
+import { resolveActiveTagsBySlugsOrAliases } from "../repositories/tags.repository.ts";
+import { getUsersByUsernames } from "../repositories/users.repository.ts";
 
 const env = readServerEnv();
 const BASE_URL = env.PUBLIC_BASE_URL;
@@ -105,6 +114,48 @@ postsRoutes.post("/", requireUser, async (c) => {
   return c.json({ post, canonicalUrl: buildCanonicalPostUrl(BASE_URL, post) }, 201);
 });
 
+postsRoutes.post("/:postCode/reposts", requireUser, async (c) => {
+  const user = getAuthUser(c);
+  enforceRateLimit(`repost:${user.id}`, RATE_LIMITS.createRepost);
+
+  const target = await resolveReshareTarget(c.req.param("postCode"), user.id);
+  if (await hasPublishedRepost(user.id, target.id)) {
+    throw conflict("REPOST_EXISTS", "You already reposted this.");
+  }
+
+  const { publicCode } = await createPost({
+    authorId: user.id,
+    postKind: "repost",
+    title: reshareTitle(target.title),
+    repostOfPostId: target.id,
+    tagIds: [],
+  });
+  const post = await getPublishedPostByPublicCode(publicCode, user.id);
+  if (!post) throw notFound("Post not found after creation.");
+
+  return c.json({ post, canonicalUrl: buildCanonicalPostUrl(BASE_URL, post) }, 201);
+});
+
+postsRoutes.post("/:postCode/quotes", requireUser, async (c) => {
+  const user = getAuthUser(c);
+  enforceRateLimit(`quote:${user.id}`, RATE_LIMITS.createQuote);
+  const { bodyText } = parseOrThrow(CreateQuotePostSchema, await readJsonBody(c));
+
+  const target = await resolveReshareTarget(c.req.param("postCode"), user.id);
+  const { publicCode } = await createPost({
+    authorId: user.id,
+    postKind: "quote",
+    title: reshareTitle(target.title),
+    bodyText,
+    repostOfPostId: target.id,
+    tagIds: [],
+  });
+  const post = await getPublishedPostByPublicCode(publicCode, user.id);
+  if (!post) throw notFound("Post not found after creation.");
+
+  return c.json({ post, canonicalUrl: buildCanonicalPostUrl(BASE_URL, post) }, 201);
+});
+
 // POST /api/posts/:postCode/comments — flat or one-level reply (spec §13).
 postsRoutes.post("/:postCode/comments", requireUser, async (c) => {
   const user = getAuthUser(c);
@@ -122,6 +173,7 @@ postsRoutes.post("/:postCode/comments", requireUser, async (c) => {
   }
 
   let parentCommentId: string | null = null;
+  let parentAuthorId: string | null = null;
   if (parentCommentCode) {
     const parent = await getReplyParent(postId, parentCommentCode);
     if (!parent) throw notFound("Parent comment not found.");
@@ -131,10 +183,23 @@ postsRoutes.post("/:postCode/comments", requireUser, async (c) => {
       throw forbidden("You can't reply to this comment.");
     }
     parentCommentId = parent.id;
+    parentAuthorId = parent.authorId;
   }
 
+  const mentionTargets = await resolveMentionTargets(user, bodyText);
   const publicCode = await createComment({ postId, authorId: user.id, bodyText, parentCommentId });
   await recordPostEvent({ postId, actorUserId: user.id, eventType: "comment_created" });
+  const commentRef = await getCommentNotificationRefByCode(publicCode);
+  if (commentRef) {
+    await createCommentNotifications({
+      actorUserId: user.id,
+      commentId: commentRef.id,
+      mentionTargetUserIds: mentionTargets.map((target) => target.id),
+      parentAuthorId,
+      postId,
+      postOwnerId,
+    });
+  }
 
   return c.json(await getCommentByCode(publicCode), 201);
 });
@@ -160,9 +225,98 @@ async function resolveTagIds(slugs: string[]): Promise<string[]> {
   const unique = [...new Set(slugs)];
   if (unique.length === 0) return [];
 
-  const found = await getActiveTagsBySlugs(unique);
-  if (found.length !== unique.length) {
+  const resolved = await resolveActiveTagsBySlugsOrAliases(unique);
+  if (resolved.invalidSlugs.length > 0) {
     throw badRequest("One or more tags are not available.");
   }
-  return found.map((tag) => tag.id);
+  return resolved.tags.map((tag) => tag.id);
+}
+
+async function resolveReshareTarget(postCode: string, actorUserId: string) {
+  const target = await getReshareTargetByPublicCode(postCode);
+  if (!target || target.status !== "published") throw notFound("Post not found.");
+
+  // Reposting or quoting your own post is just self-amplification (spec §15, anti-spam).
+  if (target.authorId === actorUserId) {
+    throw badRequest("You can't repost or quote your own post.");
+  }
+
+  if (await isBlocked(target.authorId, actorUserId)) {
+    throw forbidden("You can't repost this post.");
+  }
+  if (await isBlocked(actorUserId, target.authorId)) {
+    throw forbidden("Unblock this user before reposting.");
+  }
+
+  return target;
+}
+
+function reshareTitle(title: string): string {
+  const value = title.replace(/^(?:(?:Repost|Quote):\s*)+/i, "").trim() || title;
+  return value.length <= 180 ? value : `${value.slice(0, 177)}...`;
+}
+
+async function createCommentNotifications(input: {
+  actorUserId: string;
+  commentId: string;
+  mentionTargetUserIds: string[];
+  parentAuthorId: string | null;
+  postId: string;
+  postOwnerId: string | null;
+}) {
+  const notified = new Set<string>();
+
+  async function notify(
+    recipientUserId: string | null,
+    type: "post_reply" | "comment_reply" | "mention",
+  ) {
+    if (!recipientUserId || notified.has(recipientUserId)) return;
+    const ok = await createNotification({
+      recipientUserId,
+      actorUserId: input.actorUserId,
+      type,
+      postId: input.postId,
+      commentId: input.commentId,
+    });
+    if (ok) notified.add(recipientUserId);
+  }
+
+  await notify(input.parentAuthorId, "comment_reply");
+  await notify(input.postOwnerId, "post_reply");
+
+  for (const userId of input.mentionTargetUserIds) {
+    await notify(userId, "mention");
+  }
+}
+
+const MENTION_PATTERN = /(^|[^a-z0-9_])@([a-z0-9_]{3,24})(?![a-z0-9_])/gi;
+
+async function resolveMentionTargets(
+  actor: { id: string; username: string },
+  bodyText: string,
+): Promise<Array<{ id: string; username: string }>> {
+  const usernames = extractMentionUsernames(bodyText);
+  if (usernames.length === 0) return [];
+
+  if (usernames.length > MAX_MENTIONS_PER_COMMENT) {
+    throw badRequest(`Comments can mention up to ${MAX_MENTIONS_PER_COMMENT} people.`);
+  }
+
+  const users = await getUsersByUsernames(usernames);
+  const found = new Set(users.map((user) => user.username));
+  const missing = usernames.find((username) => !found.has(username));
+  if (missing) throw badRequest(`@${missing} is not a Doomscrollr user.`);
+
+  const externalMentionCount = users.filter((user) => user.id !== actor.id).length;
+  enforceRateLimit(`mention:${actor.id}`, RATE_LIMITS.mention, externalMentionCount);
+  return users;
+}
+
+function extractMentionUsernames(bodyText: string): string[] {
+  const usernames = new Set<string>();
+  for (const match of bodyText.matchAll(MENTION_PATTERN)) {
+    const username = match[2]?.toLowerCase();
+    if (username) usernames.add(username);
+  }
+  return [...usernames];
 }

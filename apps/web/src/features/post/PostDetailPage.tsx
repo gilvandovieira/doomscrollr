@@ -1,11 +1,16 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "@tanstack/react-router";
 import { useEffect } from "react";
+import { useAuthToken, useIsSignedIn } from "../../app/account.ts";
 import { fetchComments, fetchPost, sendEvent } from "../../app/api.ts";
 import { PostMedia } from "../../components/PostMedia.tsx";
 import { ReactionBar } from "../../components/ReactionBar.tsx";
 import { ReportButton } from "../../components/ReportButton.tsx";
+import { ReshareControls } from "../../components/ReshareControls.tsx";
 import { ShareControls } from "../../components/ShareControls.tsx";
+import { TagLink } from "../../components/TagLink.tsx";
+import { postDisplayTitle } from "../../lib/post-display.ts";
+import { PostDetailSkeleton } from "./PostDetailSkeleton.tsx";
 import { CommentThread } from "./comments/CommentThread.tsx";
 
 const dateFormatter = new Intl.DateTimeFormat("en", {
@@ -17,15 +22,17 @@ const dateFormatter = new Intl.DateTimeFormat("en", {
 export function PostDetailPage() {
   const params = useParams({ strict: false }) as { postCode?: string };
   const postCode = params.postCode ?? "";
+  const getToken = useAuthToken();
+  const signedIn = useIsSignedIn();
 
   const postQuery = useQuery({
-    queryKey: ["post", postCode],
-    queryFn: () => fetchPost(postCode),
+    queryKey: ["post", postCode, signedIn],
+    queryFn: () => fetchPost(postCode, getToken),
     enabled: postCode.length > 0,
   });
   const commentsQuery = useQuery({
-    queryKey: ["post-comments", postCode],
-    queryFn: () => fetchComments(postCode),
+    queryKey: ["post-comments", postCode, signedIn],
+    queryFn: () => fetchComments(postCode, getToken),
     enabled: postCode.length > 0,
   });
 
@@ -35,13 +42,14 @@ export function PostDetailPage() {
   }, [postCode]);
 
   if (postQuery.isPending) {
-    return <Shell message="Loading post…" />;
+    return <PostDetailSkeleton />;
   }
   if (postQuery.isError || !postQuery.data) {
     return <Shell message="This post is unavailable." />;
   }
 
   const post = postQuery.data;
+  const displayTitle = postDisplayTitle(post);
 
   return (
     <article className="space-y-4">
@@ -62,16 +70,12 @@ export function PostDetailPage() {
         </div>
 
         <div className="space-y-4 p-4">
-          <h1 className="mobile-title">{post.title}</h1>
+          <h1 className="mobile-title">{displayTitle}</h1>
           <PostMedia post={post} mode="detail" />
 
           {post.tags.length > 0 && (
             <div className="flex flex-wrap gap-2">
-              {post.tags.map((tag) => (
-                <span key={tag} className="tag-chip">
-                  #{tag}
-                </span>
-              ))}
+              {post.tags.map((tag) => <TagLink key={tag} slug={tag} />)}
             </div>
           )}
 
@@ -84,6 +88,8 @@ export function PostDetailPage() {
             />
             <ReportButton targetType="post" targetCode={post.publicCode} />
           </div>
+
+          <ReshareControls post={post} variant="detail" />
 
           <div className="border-t border-ink/10 pt-4">
             <ShareControls post={post} />

@@ -1,16 +1,46 @@
 {
   "name": "Doomscrollr",
   "short_name": "Doomscrollr",
+  "id": "/",
+  "lang": "en",
   "description": "Post it. Drop it in the group chat. Watch them argue.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
+  "display_override": ["standalone", "minimal-ui", "browser"],
   "orientation": "portrait",
   "background_color": "#0f1014",
   "theme_color": "#5b5bf0",
   "categories": ["social"],
   "icons": [
     { "src": "/icon.svg", "type": "image/svg+xml", "sizes": "any", "purpose": "any" },
-    { "src": "/icon.svg", "type": "image/svg+xml", "sizes": "any", "purpose": "maskable" }
-  ]
+    { "src": "/icon-192.png", "type": "image/png", "sizes": "192x192", "purpose": "any" },
+    { "src": "/icon-512.png", "type": "image/png", "sizes": "512x512", "purpose": "any" },
+    {
+      "src": "/maskable-512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Create post",
+      "short_name": "Create",
+      "description": "Start a Doomscrollr post.",
+      "url": "/create",
+      "icons": [{ "src": "/icon-192.png", "type": "image/png", "sizes": "192x192" }]
+    }
+  ],
+  "share_target": {
+    "action": "/create",
+    "method": "GET",
+    "enctype": "application/x-www-form-urlencoded",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url"
+    }
+  },
+  "prefer_related_applications": false
 }

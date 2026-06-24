@@ -32,7 +32,7 @@ export function ReactionBar({ kind, code, score, viewerReaction }: ReactionBarPr
     const value = state.value === next ? 0 : next;
     const previousScore = state.score;
     setBusy(true);
-    setVoteFlash({ dir: next, id: motionId() });
+    runVoteFlash(next);
     try {
       const result = kind === "post"
         ? await setPostReaction(code, value, getToken)
@@ -40,13 +40,25 @@ export function ReactionBar({ kind, code, score, viewerReaction }: ReactionBarPr
       const scoreDelta = result.score - previousScore;
       setState({ score: result.score, value: result.value });
       if (scoreDelta !== 0) {
-        setScoreFlash({ dir: scoreDelta > 0 ? 1 : -1, id: motionId() });
+        runScoreFlash(scoreDelta > 0 ? 1 : -1);
       }
     } catch {
       // Surface nothing for v1; the score simply doesn't change.
     } finally {
       setBusy(false);
     }
+  }
+
+  function runVoteFlash(dir: 1 | -1) {
+    const flash = { dir, id: motionId() };
+    setVoteFlash(flash);
+    globalThis.setTimeout(() => clearVoteFlash(flash.id), 320);
+  }
+
+  function runScoreFlash(dir: 1 | -1) {
+    const flash = { dir, id: motionId() };
+    setScoreFlash(flash);
+    globalThis.setTimeout(() => clearScoreFlash(flash.id), 320);
   }
 
   function clearVoteFlash(id: number) {

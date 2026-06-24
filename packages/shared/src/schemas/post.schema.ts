@@ -10,8 +10,8 @@ import {
 } from "../constants.ts";
 import { AuthorSchema } from "./user.schema.ts";
 
-// v1 supports exactly three post kinds. No uploads, no GIF providers (spec §2, §8.2).
-export const PostKindSchema = z.enum(["text", "external_image", "youtube"]);
+// v2 adds reposts and quote posts while keeping media providers limited.
+export const PostKindSchema = z.enum(["text", "external_image", "youtube", "repost", "quote"]);
 
 // Posts are either published (SFW and allowed) or removed (spec §3, §8.2).
 export const PostStatusSchema = z.enum(["published", "removed"]);
@@ -47,6 +47,26 @@ export const CreatePostSchema = z.discriminatedUnion("postKind", [
   }),
 ]);
 
+export const CreateQuotePostSchema = z.object({
+  bodyText: z.string().trim().min(1).max(POST_BODY_MAX_LENGTH),
+});
+
+const EmbeddedPostSchema = z
+  .object({
+    publicCode: z.string().min(1),
+    slug: z.string().min(1),
+    postKind: PostKindSchema,
+    title: z.string().min(1),
+    bodyText: z.string().nullable(),
+    imageUrl: z.string().url().nullable(),
+    youtubeUrl: z.string().url().nullable(),
+    youtubeVideoId: z.string().nullable(),
+    youtubeIsShort: z.boolean(),
+    author: AuthorSchema,
+    canonicalPath: z.string().min(1),
+  })
+  .strict();
+
 // Public post shape. Internal ids never cross the boundary; posts are addressed
 // by publicCode + slug (spec §6, §7).
 export const FeedPostSchema = z
@@ -64,7 +84,10 @@ export const FeedPostSchema = z
     score: z.number().int(),
     reactionCount: z.number().int().nonnegative(),
     commentCount: z.number().int().nonnegative(),
+    repostCount: z.number().int().nonnegative(),
+    quoteCount: z.number().int().nonnegative(),
     author: AuthorSchema,
+    repostOf: EmbeddedPostSchema.nullable(),
     tags: z.array(z.string()),
     canonicalPath: z.string().min(1),
     createdAt: z.string().datetime(),

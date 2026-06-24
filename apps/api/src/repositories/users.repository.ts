@@ -1,7 +1,7 @@
 import { comments, posts, users } from "@doomscrollr/database/schema.ts";
 import { generateId } from "@doomscrollr/shared/lib/ids.ts";
 import type { UserProfile, UserRole, UserStatus } from "@doomscrollr/shared/types.ts";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "../db/client.ts";
 import { toUserProfile, type UserRow } from "./transformers.ts";
 
@@ -45,6 +45,29 @@ export async function getUserIdByUsername(username: string): Promise<string | nu
     .where(eq(users.username, username))
     .limit(1);
   return rows[0]?.id ?? null;
+}
+
+export async function getUserModerationTargetByUsername(
+  username: string,
+): Promise<{ id: string; username: string; status: UserStatus } | null> {
+  const rows = await requireDb()
+    .select({ id: users.id, username: users.username, status: users.status })
+    .from(users)
+    .where(eq(users.username, username))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+export async function getUsersByUsernames(
+  usernames: string[],
+): Promise<Array<{ id: string; username: string }>> {
+  const unique = [...new Set(usernames.map((username) => username.toLowerCase()))];
+  if (unique.length === 0) return [];
+
+  return await requireDb()
+    .select({ id: users.id, username: users.username })
+    .from(users)
+    .where(inArray(users.username, unique));
 }
 
 export async function getLocalUserByClerkId(clerkUserId: string): Promise<LocalUser | null> {
@@ -91,6 +114,18 @@ export async function setUsername(userId: string, username: string): Promise<Loc
     .where(eq(users.id, userId))
     .returning(localUserColumns);
   return rows[0];
+}
+
+export async function setUserStatusByUsername(
+  username: string,
+  status: UserStatus,
+): Promise<{ id: string; username: string; status: UserStatus } | null> {
+  const rows = await requireDb()
+    .update(users)
+    .set({ status, updatedAt: new Date() })
+    .where(eq(users.username, username))
+    .returning({ id: users.id, username: users.username, status: users.status });
+  return rows[0] ?? null;
 }
 
 export async function getUserProfile(username: string): Promise<UserProfile | null> {
