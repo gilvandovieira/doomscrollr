@@ -1,16 +1,20 @@
 import { Outlet } from "@tanstack/react-router";
 import { HAS_CLERK } from "../app/auth.ts";
+import { BottomNav } from "./BottomNav.tsx";
+import { DesignStyleSwitcher } from "./DesignStyleSwitcher.tsx";
 import { Header } from "./Header.tsx";
 import { UsernameGate } from "./UsernameGate.tsx";
 
 export function AppLayout() {
   return (
-    <div className="min-h-screen text-ink">
+    <div className="app-shell">
       <Header />
-      <main className="mx-auto w-full max-w-3xl px-3 pb-16 pt-4 sm:px-5">
+      <main className="app-main">
+        <DesignStyleSwitcher />
         {HAS_CLERK && <UsernameGate />}
         <Outlet />
       </main>
+      <BottomNav />
     </div>
   );
 }

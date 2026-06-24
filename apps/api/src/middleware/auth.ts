@@ -3,7 +3,11 @@ import type { Context, MiddlewareHandler } from "hono";
 import { conflict, forbidden, unauthorized } from "../lib/errors.ts";
 import { logger } from "../lib/logger.ts";
 import { hasDatabase } from "../db/client.ts";
-import { getLocalUserByClerkId, getUserIdByClerkId, type LocalUser } from "../repositories/users.repository.ts";
+import {
+  getLocalUserByClerkId,
+  getUserIdByClerkId,
+  type LocalUser,
+} from "../repositories/users.repository.ts";
 
 const DEFAULT_AUTHORIZED_PARTIES = ["http://localhost:5173", "http://127.0.0.1:5173"];
 
@@ -12,6 +16,15 @@ const DEFAULT_AUTHORIZED_PARTIES = ["http://localhost:5173", "http://127.0.0.1:5
 export async function verifyClerkToken(c: Context): Promise<string | null> {
   const token = readBearerToken(c.req.header("authorization"));
   if (!token) return null;
+
+  // Test-only auth seam (used by the e2e harness). A bearer of the form
+  // `test:<clerkUserId>` is accepted as that user WITHOUT contacting Clerk, so
+  // e2e tests can act as any seeded user deterministically and offline. This
+  // branch only activates when APP_ENV is exactly "test" AND the explicit
+  // E2E_AUTH flag is set, so it can never become a backdoor in development or
+  // production (where APP_ENV is "development"/"production").
+  const testUserId = testAuthUserId(token);
+  if (testUserId) return testUserId;
 
   const secretKey = Deno.env.get("CLERK_SECRET_KEY");
   if (!secretKey) {
@@ -89,6 +102,18 @@ export function getAuthUser(c: Context): LocalUser {
 function readBearerToken(authorization: string | undefined) {
   const match = authorization?.match(/^Bearer\s+(.+)$/i);
   return match?.[1];
+}
+
+// Resolve the impersonated Clerk user id from a `test:<clerkUserId>` bearer, but
+// only under the doubly-gated test seam. Returns null in every other case, so the
+// real Clerk verification path is always used outside of e2e runs.
+const TEST_TOKEN_PREFIX = "test:";
+function testAuthUserId(token: string): string | null {
+  if (Deno.env.get("APP_ENV") !== "test") return null;
+  if (Deno.env.get("E2E_AUTH") !== "1") return null;
+  if (!token.startsWith(TEST_TOKEN_PREFIX)) return null;
+  const clerkUserId = token.slice(TEST_TOKEN_PREFIX.length).trim();
+  return clerkUserId.length > 0 ? clerkUserId : null;
 }
 
 function readAuthorizedParties() {

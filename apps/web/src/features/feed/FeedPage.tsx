@@ -5,13 +5,19 @@ export function FeedPage() {
   const feed = useRecentFeed();
 
   if (feed.isPending) {
-    return <p className="font-mono text-sm font-black uppercase">Loading the feed…</p>;
+    return (
+      <div className="space-y-3" aria-label="Loading feed">
+        <div className="h-6 w-36 rounded-full bg-newsprint" />
+        <div className="hard-panel h-56 animate-pulse bg-newsprint" />
+        <div className="hard-panel h-44 animate-pulse bg-newsprint" />
+      </div>
+    );
   }
 
   if (feed.isError) {
     return (
       <div className="hard-panel p-5">
-        <p className="font-mono text-xs font-black uppercase text-oxide">Feed unavailable</p>
+        <p className="meta-label text-oxide">Feed unavailable</p>
         <p className="mt-2 text-sm font-bold">Could not load the recent feed. Try again shortly.</p>
       </div>
     );
@@ -22,16 +28,19 @@ export function FeedPage() {
   if (posts.length === 0) {
     return (
       <div className="hard-panel p-5">
-        <h1 className="font-display text-3xl uppercase leading-none">No posts yet</h1>
+        <h1 className="mobile-title">No posts yet</h1>
         <p className="mt-2 text-sm font-bold">Be the first to create one.</p>
       </div>
     );
   }
 
   return (
-    <div className="space-y-4">
-      <h1 className="font-display text-3xl uppercase leading-none">Recent</h1>
-      <div className="space-y-4">
+    <section className="space-y-4">
+      <div className="px-1">
+        <h1 className="mobile-title">Fresh posts</h1>
+      </div>
+
+      <div className="space-y-3">
         {posts.map((post) => <PostCard key={post.publicCode} post={post} />)}
       </div>
       {feed.hasNextPage && (
@@ -44,6 +53,6 @@ export function FeedPage() {
           {feed.isFetchingNextPage ? "Loading…" : "Load more"}
         </button>
       )}
-    </div>
+    </section>
   );
 }

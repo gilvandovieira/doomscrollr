@@ -37,12 +37,12 @@ export function ReactionBar({ kind, code, score, viewerReaction }: ReactionBarPr
   }
 
   const cell = (active: boolean) =>
-    `flex h-9 w-9 items-center justify-center transition ${
-      active ? "bg-oxide text-paper" : "hover:bg-signal"
+    `flex h-11 w-11 items-center justify-center transition ${
+      active ? "bg-oxide text-pitch" : "hover:bg-signal hover:text-pitch"
     } ${signedIn ? "" : "cursor-not-allowed opacity-60"}`;
 
   return (
-    <div className="inline-flex items-center border-2 border-ink bg-paper">
+    <div className="inline-flex items-center overflow-hidden rounded-full border-2 border-ink bg-paper">
       <button
         type="button"
         className={cell(state.value === 1)}
@@ -54,7 +54,7 @@ export function ReactionBar({ kind, code, score, viewerReaction }: ReactionBarPr
       >
         <ArrowBigUp aria-hidden="true" size={18} />
       </button>
-      <span className="min-w-9 px-1 text-center font-mono text-sm font-black">{state.score}</span>
+      <span className="min-w-10 px-1 text-center font-mono text-sm font-black">{state.score}</span>
       <button
         type="button"
         className={cell(state.value === -1)}

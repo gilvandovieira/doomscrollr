@@ -47,7 +47,8 @@ postsRoutes.get("/:postCode/comments", async (c) => {
 
   const postId = await getPostIdByPublicCode(postCode);
   if (!postId) throw notFound("Post not found.");
-  return c.json({ items: await listCommentsForPost(postId) });
+  const viewerId = await getOptionalViewerId(c);
+  return c.json({ items: await listCommentsForPost(postId, viewerId) });
 });
 
 postsRoutes.get("/:postCode", async (c) => {

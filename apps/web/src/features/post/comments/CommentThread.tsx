@@ -18,14 +18,14 @@ export function CommentThread({ postCode, comments, isLoading }: CommentThreadPr
     <section className="hard-panel bg-paper">
       <div className="flex items-center gap-2 border-b-2 border-ink bg-newsprint px-4 py-3">
         <MessageSquareText aria-hidden="true" size={20} />
-        <h2 className="text-xl font-black uppercase">Discussion</h2>
+        <h2 className="text-xl font-black">Discussion</h2>
       </div>
 
       <div className="space-y-4 p-4">
         <CommentComposer postCode={postCode} placeholder="Add a comment" />
 
         {isLoading
-          ? <p className="font-mono text-sm font-black uppercase">Loading comments…</p>
+          ? <p className="text-sm font-black">Loading comments…</p>
           : comments.length === 0
           ? <p className="text-sm font-bold">No comments yet. Start the discussion.</p>
           : comments.map((comment) => (
@@ -70,14 +70,18 @@ function CommentComposer(
   return (
     <form className="grid gap-2" onSubmit={submit}>
       <textarea
-        className="min-h-20 resize-y border-2 border-ink bg-newsprint p-3 text-sm font-bold disabled:opacity-60"
+        className="field-control min-h-24 resize-y p-3 text-sm disabled:opacity-60"
         placeholder={signedIn ? placeholder : "Sign in to comment"}
         value={value}
         onChange={(event) => setValue(event.target.value)}
         disabled={!signedIn || busy}
         maxLength={2000}
       />
-      <button type="submit" className="tool-button w-fit" disabled={!signedIn || busy || !value.trim()}>
+      <button
+        type="submit"
+        className="tool-button w-fit"
+        disabled={!signedIn || busy || !value.trim()}
+      >
         <Send aria-hidden="true" size={17} />
         {busy ? "Posting…" : "Comment"}
       </button>
@@ -92,7 +96,7 @@ function CommentItem({ postCode, comment }: { postCode: string; comment: Comment
   return (
     <article className="border-2 border-ink bg-newsprint p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="font-mono text-xs font-black uppercase text-oxide">
+        <span className="meta-label text-oxide">
           @{comment.author.username}
         </span>
         <ReportButton targetType="comment" targetCode={comment.publicCode} />
@@ -109,7 +113,7 @@ function CommentItem({ postCode, comment }: { postCode: string; comment: Comment
         {signedIn && (
           <button
             type="button"
-            className="font-mono text-[11px] font-black uppercase hover:underline"
+            className="meta-label hover:underline"
             onClick={() => setReplying((value) => !value)}
           >
             {replying ? "Cancel" : "Reply"}
@@ -118,7 +122,7 @@ function CommentItem({ postCode, comment }: { postCode: string; comment: Comment
       </div>
 
       {replying && (
-        <div className="mt-3 border-l-4 border-oxide pl-3">
+        <div className="mt-3 rounded-lg bg-paper/70 p-3">
           <CommentComposer
             postCode={postCode}
             parentCommentCode={comment.publicCode}
@@ -129,7 +133,7 @@ function CommentItem({ postCode, comment }: { postCode: string; comment: Comment
       )}
 
       {comment.replies.length > 0 && (
-        <div className="mt-3 space-y-3 border-l-4 border-oxide pl-3">
+        <div className="mt-3 space-y-3 pl-3">
           {comment.replies.map((reply) => <CommentReply key={reply.publicCode} reply={reply} />)}
         </div>
       )}
@@ -141,7 +145,7 @@ function CommentReply({ reply }: { reply: ReplyComment }) {
   return (
     <article className="border-2 border-ink bg-paper p-3">
       <div className="flex items-center justify-between gap-2">
-        <span className="font-mono text-xs font-black uppercase text-oxide">
+        <span className="meta-label text-oxide">
           @{reply.author.username}
         </span>
         <ReportButton targetType="comment" targetCode={reply.publicCode} />

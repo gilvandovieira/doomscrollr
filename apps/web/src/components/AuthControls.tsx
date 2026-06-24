@@ -5,7 +5,7 @@ import { HAS_CLERK } from "../app/auth.ts";
 export function AuthControls() {
   if (!HAS_CLERK) {
     return (
-      <span className="hidden h-10 items-center border-2 border-ink bg-newsprint px-3 font-mono text-xs font-black uppercase text-ink md:inline-flex">
+      <span className="hidden min-h-10 items-center rounded-full border-2 border-ink bg-newsprint px-3 font-mono text-xs font-black text-ink md:inline-flex">
         Auth off
       </span>
     );
@@ -15,13 +15,13 @@ export function AuthControls() {
     <div className="flex items-center gap-2">
       <Show when="signed-out">
         <SignInButton mode="modal">
-          <button type="button" className="tool-button">
+          <button type="button" className="tool-button" aria-label="Sign in">
             <LogIn aria-hidden="true" size={17} />
             <span className="hidden sm:inline">Sign in</span>
           </button>
         </SignInButton>
         <SignUpButton mode="modal">
-          <button type="button" className="tool-button bg-signal">
+          <button type="button" className="tool-button bg-signal" aria-label="Sign up">
             <UserPlus aria-hidden="true" size={17} />
             <span className="hidden sm:inline">Sign up</span>
           </button>
@@ -29,8 +29,8 @@ export function AuthControls() {
       </Show>
 
       <Show when="signed-in">
-        <div className="flex h-10 items-center gap-2 border-2 border-ink bg-paper px-2 shadow-[3px_3px_0_#181512]">
-          <span className="hidden font-mono text-xs font-black uppercase sm:inline">Account</span>
+        <div className="flex min-h-11 items-center gap-2 rounded-full border-2 border-ink bg-paper px-2 shadow-hard">
+          <span className="hidden font-mono text-xs font-black sm:inline">Account</span>
           <UserButton
             appearance={{
               elements: {

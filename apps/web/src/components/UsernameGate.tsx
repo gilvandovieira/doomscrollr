@@ -31,7 +31,7 @@ export function UsernameGate() {
 
   return (
     <div className="mb-4 hard-panel p-4">
-      <h2 className="font-display text-2xl uppercase leading-none">Pick your @handle</h2>
+      <h2 className="text-2xl font-black leading-tight tracking-[-0.02em]">Pick your @handle</h2>
       <p className="mt-1 text-sm font-bold">
         Choose a username before you post, comment, or react.
       </p>
@@ -41,15 +41,15 @@ export function UsernameGate() {
           value={value}
           onChange={(event) => setValue(event.target.value)}
           placeholder="lucas"
-          className="h-10 flex-1 border-2 border-ink bg-newsprint px-3 font-mono text-sm font-bold"
+          className="field-control min-h-11 flex-1 px-3 font-mono text-sm"
           autoCapitalize="none"
           autoComplete="off"
         />
-        <button type="submit" className="tool-button bg-signal" disabled={saving}>
+        <button type="submit" className="tool-button bg-signal text-pitch" disabled={saving}>
           {saving ? "Saving…" : "Claim"}
         </button>
       </form>
-      {error && <p className="mt-2 font-mono text-xs font-black uppercase text-oxide">{error}</p>}
+      {error && <p className="meta-label mt-2 text-oxide">{error}</p>}
     </div>
   );
 }

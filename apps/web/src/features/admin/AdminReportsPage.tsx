@@ -37,14 +37,16 @@ export function AdminReportsPage() {
 
   return (
     <section className="space-y-4">
-      <h1 className="font-display text-3xl uppercase leading-none">Open reports</h1>
+      <h1 className="mobile-title">Open reports</h1>
       {reports.length === 0
-        ? <div className="hard-panel p-5"><p className="text-sm font-bold">No open reports.</p></div>
+        ? (
+          <div className="hard-panel p-5">
+            <p className="text-sm font-bold">No open reports.</p>
+          </div>
+        )
         : (
           <div className="space-y-3">
-            {reports.map((report) => (
-              <ReportRow key={report.id} report={report} onAction={run} />
-            ))}
+            {reports.map((report) => <ReportRow key={report.id} report={report} onAction={run} />)}
           </div>
         )}
     </section>
@@ -55,9 +57,9 @@ function ReportRow({ report, onAction }: { report: Report; onAction: (path: stri
   const code = report.targetCode;
   return (
     <article className="hard-panel space-y-2 p-4">
-      <div className="flex flex-wrap items-center justify-between gap-2 font-mono text-xs font-black uppercase">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="text-oxide">{report.targetType}: {code}</span>
-        <span>by @{report.reporter.username}</span>
+        <span className="meta-label">by @{report.reporter.username}</span>
       </div>
       <p className="text-sm font-bold">
         {report.reason.replace(/_/g, " ")}
@@ -66,27 +68,43 @@ function ReportRow({ report, onAction }: { report: Report; onAction: (path: stri
       <div className="flex flex-wrap gap-2">
         {report.targetType === "post" && (
           <>
-            <button type="button" className="tool-button" onClick={() => onAction(`posts/${code}/remove`)}>
+            <button
+              type="button"
+              className="tool-button"
+              onClick={() => onAction(`posts/${code}/remove`)}
+            >
               Remove post
             </button>
-            <button type="button" className="tool-button" onClick={() => onAction(`posts/${code}/restore`)}>
+            <button
+              type="button"
+              className="tool-button"
+              onClick={() => onAction(`posts/${code}/restore`)}
+            >
               Restore post
             </button>
           </>
         )}
         {report.targetType === "comment" && (
           <>
-            <button type="button" className="tool-button" onClick={() => onAction(`comments/${code}/remove`)}>
+            <button
+              type="button"
+              className="tool-button"
+              onClick={() => onAction(`comments/${code}/remove`)}
+            >
               Remove comment
             </button>
-            <button type="button" className="tool-button" onClick={() => onAction(`comments/${code}/restore`)}>
+            <button
+              type="button"
+              className="tool-button"
+              onClick={() => onAction(`comments/${code}/restore`)}
+            >
               Restore comment
             </button>
           </>
         )}
         <button
           type="button"
-          className="tool-button bg-signal"
+          className="tool-button bg-signal text-pitch"
           onClick={() => onAction(`reports/${report.id}/dismiss`)}
         >
           Dismiss
@@ -99,7 +117,7 @@ function ReportRow({ report, onAction }: { report: Report; onAction: (path: stri
 function Shell({ message }: { message: string }) {
   return (
     <div className="hard-panel grid min-h-60 place-items-center bg-newsprint p-6">
-      <p className="font-mono text-sm font-black uppercase">{message}</p>
+      <p className="text-center text-sm font-black">{message}</p>
     </div>
   );
 }

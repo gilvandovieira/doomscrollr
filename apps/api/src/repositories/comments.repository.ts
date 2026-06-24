@@ -1,8 +1,8 @@
-import { comments, posts, users } from "@doomscrollr/database/schema.ts";
+import { comments, posts, userBlocks, users } from "@doomscrollr/database/schema.ts";
 import { alias } from "drizzle-orm/pg-core";
 import { generateId, generatePublicCode } from "@doomscrollr/shared/lib/ids.ts";
 import type { Comment } from "@doomscrollr/shared/types.ts";
-import { and, asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, type SQL, sql } from "drizzle-orm";
 import { db } from "../db/client.ts";
 import { type CommentRow, toComment, toReply } from "./transformers.ts";
 
@@ -17,10 +17,19 @@ const commentAuthorColumns = {
   avatarUrl: users.avatarUrl,
 };
 
+function commentAuthorNotBlocked(viewerId: string): SQL {
+  return sql`NOT EXISTS (
+    SELECT 1 FROM ${userBlocks} b
+    WHERE b.blocker_user_id = ${viewerId} AND b.blocked_user_id = ${comments.authorId}
+  )`;
+}
+
 // List published comments for a post as a one-level tree (spec §13). Replies are
 // grouped under their top-level parent by public code.
-export async function listCommentsForPost(postId: string): Promise<Comment[]> {
+export async function listCommentsForPost(postId: string, viewerId?: string): Promise<Comment[]> {
   const parent = alias(comments, "parent");
+  const filters: SQL[] = [eq(comments.postId, postId), eq(comments.status, "published")];
+  if (viewerId) filters.push(commentAuthorNotBlocked(viewerId));
 
   const rows = await requireDb()
     .select({
@@ -42,7 +51,7 @@ export async function listCommentsForPost(postId: string): Promise<Comment[]> {
     .from(comments)
     .innerJoin(users, eq(comments.authorId, users.id))
     .leftJoin(parent, eq(comments.parentCommentId, parent.id))
-    .where(and(eq(comments.postId, postId), eq(comments.status, "published")))
+    .where(and(...filters))
     .orderBy(asc(comments.createdAt), asc(comments.id));
 
   const typed = rows as CommentRow[];

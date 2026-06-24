@@ -26,7 +26,9 @@
     "db:migrate": "deno task --filter @doomscrollr/database migrate",
     "db:seed": "deno task --filter @doomscrollr/database seed",
     "check": "deno task --filter @doomscrollr/api check && deno task --filter @doomscrollr/web check && deno task --filter @doomscrollr/config check && deno task --filter @doomscrollr/database check && deno task --filter @doomscrollr/shared check",
-    "test": "deno test --allow-env --permit-no-files packages apps"
+    "check:e2e": "deno check apps/api/e2e/*.e2e.test.ts",
+    "test": "deno test --allow-env --permit-no-files --ignore=apps/api/e2e packages apps",
+    "test:e2e": "deno test -A apps/api/e2e/"
   },
   "imports": {
     "@doomscrollr/config/": "./packages/config/src/",

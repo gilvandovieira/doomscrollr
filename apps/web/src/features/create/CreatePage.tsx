@@ -27,8 +27,8 @@ export function CreatePage() {
   if (!signedIn) {
     return (
       <div className="hard-panel p-5">
-        <h1 className="font-display text-3xl uppercase leading-none">Sign in to post</h1>
-        <p className="mt-2 text-sm font-bold">Use the Sign in button in the header to continue.</p>
+        <h1 className="mobile-title">Sign in to post</h1>
+        <p className="mt-2 text-sm font-bold">Posting needs an account. Reading stays open.</p>
       </div>
     );
   }
@@ -36,7 +36,9 @@ export function CreatePage() {
   function buildInput(): CreatePostInput {
     const tagList = tags.split(",").map((t) => t.trim().toLowerCase()).filter(Boolean);
     if (kind === "text") return { postKind: "text", title, bodyText, tags: tagList };
-    if (kind === "external_image") return { postKind: "external_image", title, imageUrl, tags: tagList };
+    if (kind === "external_image") {
+      return { postKind: "external_image", title, imageUrl, tags: tagList };
+    }
     return { postKind: "youtube", title, youtubeUrl, tags: tagList };
   }
 
@@ -46,7 +48,10 @@ export function CreatePage() {
     setError(null);
     try {
       const { post } = await createPost(buildInput(), getToken);
-      navigate({ to: "/p/$postCode/$slug", params: { postCode: post.publicCode, slug: post.slug } });
+      navigate({
+        to: "/p/$postCode/$slug",
+        params: { postCode: post.publicCode, slug: post.slug },
+      });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not create the post.");
     } finally {
@@ -56,15 +61,17 @@ export function CreatePage() {
 
   return (
     <section className="space-y-4">
-      <h1 className="font-display text-3xl uppercase leading-none">Create a post</h1>
+      <div className="px-1">
+        <h1 className="mobile-title">Create a post</h1>
+      </div>
 
-      <div className="flex gap-2">
+      <div className="grid grid-cols-3 gap-2">
         {TABS.map((tab) => (
           <button
             key={tab.kind}
             type="button"
             onClick={() => setKind(tab.kind)}
-            className={`tool-button ${kind === tab.kind ? "bg-signal" : ""}`}
+            className={`tool-button px-2 ${kind === tab.kind ? "bg-signal text-pitch" : ""}`}
           >
             {tab.label}
           </button>
@@ -77,7 +84,7 @@ export function CreatePage() {
             value={title}
             onChange={(event) => setTitle(event.target.value)}
             placeholder="Say something"
-            className="h-10 w-full border-2 border-ink bg-newsprint px-3 text-sm font-bold"
+            className="field-control min-h-11 px-3 text-sm"
             maxLength={180}
           />
         </Field>
@@ -87,7 +94,7 @@ export function CreatePage() {
             <textarea
               value={bodyText}
               onChange={(event) => setBodyText(event.target.value)}
-              className="min-h-32 w-full resize-y border-2 border-ink bg-newsprint p-3 text-sm font-bold"
+              className="field-control min-h-32 resize-y p-3 text-sm"
               placeholder="Write your post"
             />
           </Field>
@@ -98,7 +105,7 @@ export function CreatePage() {
               value={imageUrl}
               onChange={(event) => setImageUrl(event.target.value)}
               placeholder="https://example.com/meme.jpg"
-              className="h-10 w-full border-2 border-ink bg-newsprint px-3 text-sm font-bold"
+              className="field-control min-h-11 px-3 text-sm"
             />
           </Field>
         )}
@@ -108,7 +115,7 @@ export function CreatePage() {
               value={youtubeUrl}
               onChange={(event) => setYoutubeUrl(event.target.value)}
               placeholder="https://www.youtube.com/watch?v=…"
-              className="h-10 w-full border-2 border-ink bg-newsprint px-3 text-sm font-bold"
+              className="field-control min-h-11 px-3 text-sm"
             />
           </Field>
         )}
@@ -118,13 +125,13 @@ export function CreatePage() {
             value={tags}
             onChange={(event) => setTags(event.target.value)}
             placeholder="programming, memes"
-            className="h-10 w-full border-2 border-ink bg-newsprint px-3 font-mono text-sm font-bold"
+            className="field-control min-h-11 px-3 font-mono text-sm"
           />
         </Field>
 
-        {error && <p className="font-mono text-xs font-black uppercase text-oxide">{error}</p>}
+        {error && <p className="meta-label text-oxide">{error}</p>}
 
-        <button type="submit" className="tool-button bg-signal" disabled={busy}>
+        <button type="submit" className="tool-button w-full bg-signal text-pitch" disabled={busy}>
           {busy ? "Publishing…" : "Publish"}
         </button>
       </form>
@@ -135,7 +142,7 @@ export function CreatePage() {
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="block space-y-1">
-      <span className="font-mono text-[11px] font-black uppercase text-oxide">{label}</span>
+      <span className="meta-label text-oxide">{label}</span>
       {children}
     </label>
   );

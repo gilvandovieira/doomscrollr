@@ -45,25 +45,30 @@ export function PostDetailPage() {
 
   return (
     <article className="space-y-4">
-      <div className="hard-panel overflow-hidden">
-        <div className="flex items-center justify-between border-b-2 border-ink bg-newsprint px-4 py-2 font-mono text-xs font-black uppercase">
-          <Link to="/$username" params={{ username: `@${post.author.username}` }} className="hover:underline">
-            @{post.author.username}
+      <div className="hard-panel">
+        <div className="flex items-center justify-between gap-3 border-b-2 border-ink bg-newsprint px-4 py-2">
+          <Link
+            to="/$username"
+            params={{ username: `@${post.author.username}` }}
+            className="inline-flex min-h-10 items-center hover:underline"
+          >
+            <span className="meta-label text-oxide">
+              @{post.author.username}
+            </span>
           </Link>
-          <span className="text-oxide">{dateFormatter.format(new Date(post.createdAt))}</span>
+          <span className="meta-label text-ink/75">
+            {dateFormatter.format(new Date(post.createdAt))}
+          </span>
         </div>
 
         <div className="space-y-4 p-4">
-          <h1 className="text-3xl font-black leading-tight">{post.title}</h1>
+          <h1 className="mobile-title">{post.title}</h1>
           <PostMedia post={post} mode="detail" />
 
           {post.tags.length > 0 && (
             <div className="flex flex-wrap gap-2">
               {post.tags.map((tag) => (
-                <span
-                  key={tag}
-                  className="border-2 border-ink bg-cyan px-2 py-1 font-mono text-[11px] font-black uppercase"
-                >
+                <span key={tag} className="tag-chip">
                   #{tag}
                 </span>
               ))}
@@ -98,7 +103,7 @@ export function PostDetailPage() {
 function Shell({ message }: { message: string }) {
   return (
     <div className="hard-panel grid min-h-60 place-items-center bg-newsprint p-6">
-      <p className="font-mono text-sm font-black uppercase">{message}</p>
+      <p className="text-center text-sm font-black">{message}</p>
     </div>
   );
 }

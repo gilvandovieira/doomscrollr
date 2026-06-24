@@ -41,8 +41,8 @@ export function ShareControls({ post }: { post: FeedPost }) {
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <button type="button" onClick={shareWhatsApp} className="tool-button bg-signal">
+    <div className="share-controls">
+      <button type="button" onClick={shareWhatsApp} className="tool-button">
         <Share2 aria-hidden="true" size={17} />
         WhatsApp
       </button>
