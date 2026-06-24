@@ -20,7 +20,7 @@ eventsRoutes.post("/", async (c) => {
   // Set/refresh the anonymous session on this public route so funnels chain.
   const anonSessionId = ensureAnonSession(c);
   // Public endpoint is pollutable; keep it within the v1 funnel budget (spec §16).
-  enforceRateLimit(`events:${anonSessionId}`, RATE_LIMITS.eventsPerSession);
+  await enforceRateLimit(`events:${anonSessionId}`, RATE_LIMITS.eventsPerSession);
 
   if (!hasDatabase()) {
     return c.body(null, 204);

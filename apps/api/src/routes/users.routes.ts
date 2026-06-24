@@ -13,7 +13,7 @@ export const usersRoutes = new Hono();
 // POST /api/users/:username/block (spec §15, §20.3).
 usersRoutes.post("/:username/block", requireUser, async (c) => {
   const user = getAuthUser(c);
-  enforceRateLimit(`block:${user.id}`, RATE_LIMITS.block);
+  await enforceRateLimit(`block:${user.id}`, RATE_LIMITS.block);
 
   const targetId = await getUserIdByUsername(c.req.param("username"));
   if (!targetId) throw notFound("User not found.");

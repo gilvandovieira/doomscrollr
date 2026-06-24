@@ -11,7 +11,7 @@ export const reportsRoutes = new Hono();
 // POST /api/reports — report a post, comment, or user (spec §14, §20.3).
 reportsRoutes.post("/", requireUser, async (c) => {
   const user = getAuthUser(c);
-  enforceRateLimit(`report:${user.id}`, RATE_LIMITS.report);
+  await enforceRateLimit(`report:${user.id}`, RATE_LIMITS.report);
 
   const data = parseOrThrow(CreateReportSchema, await readJsonBody(c));
   const created = await createReport({

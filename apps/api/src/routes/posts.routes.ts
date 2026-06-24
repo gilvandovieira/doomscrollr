@@ -80,7 +80,7 @@ postsRoutes.get("/:postCode", async (c) => {
 // POST /api/posts — create a text / external image / YouTube post (spec §12).
 postsRoutes.post("/", requireUser, async (c) => {
   const user = getAuthUser(c);
-  enforceRateLimit(`post:${user.id}`, RATE_LIMITS.createPost);
+  await enforceRateLimit(`post:${user.id}`, RATE_LIMITS.createPost);
   const data = parseOrThrow(CreatePostSchema, await readJsonBody(c));
 
   const fields: CreatePostFields = {
@@ -95,7 +95,7 @@ postsRoutes.post("/", requireUser, async (c) => {
   } else if (data.postKind === "external_image") {
     const structural = validateExternalImageUrl(data.imageUrl);
     if (!structural.ok) throw badRequest("That image URL is not allowed.");
-    enforceRateLimit(`imgcheck:${user.id}`, RATE_LIMITS.imageCheck);
+    await enforceRateLimit(`imgcheck:${user.id}`, RATE_LIMITS.imageCheck);
     const fetchable = await checkImageIsFetchable(data.imageUrl);
     if (!fetchable.ok) throw badRequest("That image could not be loaded as a supported image.");
     fields.imageUrl = data.imageUrl;
@@ -116,7 +116,7 @@ postsRoutes.post("/", requireUser, async (c) => {
 
 postsRoutes.post("/:postCode/reposts", requireUser, async (c) => {
   const user = getAuthUser(c);
-  enforceRateLimit(`repost:${user.id}`, RATE_LIMITS.createRepost);
+  await enforceRateLimit(`repost:${user.id}`, RATE_LIMITS.createRepost);
 
   const target = await resolveReshareTarget(c.req.param("postCode"), user.id);
   if (await hasPublishedRepost(user.id, target.id)) {
@@ -138,7 +138,7 @@ postsRoutes.post("/:postCode/reposts", requireUser, async (c) => {
 
 postsRoutes.post("/:postCode/quotes", requireUser, async (c) => {
   const user = getAuthUser(c);
-  enforceRateLimit(`quote:${user.id}`, RATE_LIMITS.createQuote);
+  await enforceRateLimit(`quote:${user.id}`, RATE_LIMITS.createQuote);
   const { bodyText } = parseOrThrow(CreateQuotePostSchema, await readJsonBody(c));
 
   const target = await resolveReshareTarget(c.req.param("postCode"), user.id);
@@ -159,7 +159,7 @@ postsRoutes.post("/:postCode/quotes", requireUser, async (c) => {
 // POST /api/posts/:postCode/comments — flat or one-level reply (spec §13).
 postsRoutes.post("/:postCode/comments", requireUser, async (c) => {
   const user = getAuthUser(c);
-  enforceRateLimit(`comment:${user.id}`, RATE_LIMITS.createComment);
+  await enforceRateLimit(`comment:${user.id}`, RATE_LIMITS.createComment);
   const postCode = c.req.param("postCode");
   const { bodyText, parentCommentCode } = parseOrThrow(CreateCommentSchema, await readJsonBody(c));
 
@@ -207,7 +207,7 @@ postsRoutes.post("/:postCode/comments", requireUser, async (c) => {
 // POST /api/posts/:postCode/reactions — set/change/clear a reaction (spec §8.4).
 postsRoutes.post("/:postCode/reactions", requireUser, async (c) => {
   const user = getAuthUser(c);
-  enforceRateLimit(`react:${user.id}`, RATE_LIMITS.react);
+  await enforceRateLimit(`react:${user.id}`, RATE_LIMITS.react);
   const postCode = c.req.param("postCode");
   const { value } = parseOrThrow(SetReactionSchema, await readJsonBody(c));
 
@@ -308,7 +308,7 @@ async function resolveMentionTargets(
   if (missing) throw badRequest(`@${missing} is not a Doomscrollr user.`);
 
   const externalMentionCount = users.filter((user) => user.id !== actor.id).length;
-  enforceRateLimit(`mention:${actor.id}`, RATE_LIMITS.mention, externalMentionCount);
+  await enforceRateLimit(`mention:${actor.id}`, RATE_LIMITS.mention, externalMentionCount);
   return users;
 }
 

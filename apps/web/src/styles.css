@@ -726,9 +726,51 @@ textarea:focus-visible,
     padding-bottom: 0.25rem;
   }
 
+  /* Reshares get their own surface shade so the feed reads at a glance: reposts
+     lean cool (cyan), quotes lean violet, originals stay on the plain paper. The
+     tint is a translucent overlay so it adapts to both light and dark themes. */
+  .post-card--repost {
+    background:
+      linear-gradient(oklch(var(--color-cyan) / 0.16), oklch(var(--color-cyan) / 0.16)),
+      oklch(var(--color-paper));
+    border-color: oklch(var(--color-cyan) / 0.5);
+  }
+
+  .post-card--quote {
+    background:
+      linear-gradient(oklch(var(--color-bruised) / 0.16), oklch(var(--color-bruised) / 0.16)),
+      oklch(var(--color-paper));
+    border-color: oklch(var(--color-bruised) / 0.5);
+  }
+
+  /* The kind label becomes a solid colored pill so the type is unmistakable even
+     where the surface tint washes out (esp. dark mode): cyan = repost, violet =
+     quote. Dark text on both for legible contrast in either theme. */
+  .post-card--repost .post-card__kind,
+  .post-card--quote .post-card__kind {
+    border-radius: 999px;
+    padding: 0.18rem 0.55rem;
+    color: oklch(var(--color-pitch-ink));
+    font-weight: 700;
+  }
+
+  .post-card--repost .post-card__kind {
+    background: oklch(var(--color-cyan));
+  }
+
+  .post-card--quote .post-card__kind {
+    background: oklch(var(--color-bruised));
+  }
+
   .post-card__reshare {
     border-top: 1px solid var(--line);
     padding: 0.65rem 0.9rem 0.8rem;
+  }
+
+  /* On your own posts ReshareControls renders nothing, so collapse the wrapper —
+     otherwise its divider + padding leave an orphan line under the stats. */
+  .post-card__reshare:empty {
+    display: none;
   }
 
   /* ---- Reposts / quote posts -------------------------------------------- */

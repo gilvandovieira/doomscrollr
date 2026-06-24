@@ -13,7 +13,7 @@ export const commentsRoutes = new Hono();
 // POST /api/comments/:commentCode/reactions (spec §20.3).
 commentsRoutes.post("/:commentCode/reactions", requireUser, async (c) => {
   const user = getAuthUser(c);
-  enforceRateLimit(`react:${user.id}`, RATE_LIMITS.react);
+  await enforceRateLimit(`react:${user.id}`, RATE_LIMITS.react);
   const commentCode = c.req.param("commentCode");
   const { value } = parseOrThrow(SetReactionSchema, await readJsonBody(c));
 

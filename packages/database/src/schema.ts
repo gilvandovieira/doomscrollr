@@ -294,6 +294,16 @@ export const postEvents = pgTable("post_events", {
   ),
 ]);
 
+export const rateLimitBuckets = pgTable("rate_limit_buckets", {
+  bucketKey: text("bucket_key").primaryKey(),
+  count: integer("count").notNull().default(0),
+  resetAt: timestamp("reset_at", { withTimezone: true }).notNull(),
+  updatedAt: timestamps.updatedAt,
+}, (table) => [
+  index("rate_limit_buckets_reset_idx").on(table.resetAt),
+  check("rate_limit_buckets_count_nonnegative", sql`${table.count} >= 0`),
+]);
+
 export const notifications = pgTable("notifications", {
   id: uuid("id").primaryKey(),
   recipientUserId: uuid("recipient_user_id").notNull().references(() => users.id, {

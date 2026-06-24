@@ -294,7 +294,7 @@ Goal: strengthen retention, safety, and sharing only after v1 proves the loop.
   - basic audit log
   - user suspension/ban flow
   - restore history
-- [ ] `V2-012` Move rate limits to Redis or another shared store if needed.
+- [x] `V2-012` Move rate limits to Redis or another shared store if needed.
 - [ ] `V2-013` Add internal trust levels:
   - new
   - normal
