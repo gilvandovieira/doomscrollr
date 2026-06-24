@@ -10,16 +10,27 @@ import {
 } from "./post.schema.ts";
 import { NotificationSchema } from "./notification.schema.ts";
 import { TagListResponseSchema } from "./tag.schema.ts";
-import { AuthorSchema } from "./user.schema.ts";
+import { AuthorSchema, UserProfileSchema } from "./user.schema.ts";
 import { getMockFeed, getMockPostByCode, getMockTags } from "../mock-data.ts";
 
 const EXCLUDED_KEYS = [
   "id",
+  "adultVerified",
+  "ageGate",
+  "ageVerified",
+  "ageVerification",
   "contentRating",
   "content_rating",
   "contentControls",
+  "dateOfBirth",
+  "dob",
+  "adultContent",
+  "explicitContent",
+  "isAdult",
   "isSuggestive",
+  "mature",
   "matureContent",
+  "pornography",
   "nsfw",
   "suggestive",
   "suggestiveContent",
@@ -87,12 +98,83 @@ Deno.test("create post schemas reject suggestive and mature content fields", () 
   );
 });
 
+Deno.test("mature and adult UGC remain outside post kind contracts", () => {
+  const excludedKinds = ["mature", "adult", "nsfw", "explicit", "pornography"];
+
+  for (const postKind of excludedKinds) {
+    assert(
+      !PostKindSchema.options.includes(postKind as never),
+      `PostKindSchema must not expose mature/adult kind: ${postKind}`,
+    );
+    assert(
+      !CreatePostSchema.safeParse({
+        postKind,
+        title: "Excluded mature/adult post",
+        bodyText: "This requires a separate roadmap, legal, and compliance decision.",
+        tags: [],
+      }).success,
+      `CreatePostSchema must reject mature/adult kind: ${postKind}`,
+    );
+  }
+});
+
+Deno.test("age verification fields remain outside public and create contracts", () => {
+  const profile = {
+    username: "lucas",
+    displayName: "Lucas",
+    avatarUrl: "https://example.com/a.png",
+    role: "user",
+    status: "active",
+    postCount: 0,
+    commentCount: 0,
+    createdAt: "2026-06-24T12:00:00.000Z",
+    ageVerified: true,
+  };
+  const post = {
+    postKind: "text",
+    bodyText: "Plain SFW post with no age gate.",
+    tags: [],
+    dateOfBirth: "2000-01-01",
+  };
+  const quote = {
+    bodyText: "Plain SFW quote with no age verification.",
+    ageGate: "18+",
+  };
+
+  assert(!UserProfileSchema.safeParse(profile).success, "Profiles must reject age verification.");
+  assert(!CreatePostSchema.safeParse(post).success, "Posts must reject age verification fields.");
+  assert(!CreateQuotePostSchema.safeParse(quote).success, "Quotes must reject age gate fields.");
+});
+
 Deno.test("post kinds include v2 reshare kinds without adding media providers", () => {
   assert(
     JSON.stringify(PostKindSchema.options) ===
       JSON.stringify(["text", "external_image", "youtube", "repost", "quote"]),
     "post_kind drifted from the supported set.",
   );
+});
+
+Deno.test("create post schema rejects deferred media provider kinds", () => {
+  const deferredKinds = [
+    "provider_gif",
+    "uploaded_image",
+    "uploaded_gif",
+    "giphy",
+    "tenor",
+    "link",
+  ];
+
+  for (const postKind of deferredKinds) {
+    const result = CreatePostSchema.safeParse({
+      postKind,
+      title: "Deferred provider",
+      bodyText: "This should not be accepted without an earned provider decision.",
+      imageUrl: "https://example.com/media.gif",
+      youtubeUrl: "https://youtu.be/jNQXAC9IVRw",
+      tags: [],
+    });
+    assert(!result.success, `CreatePostSchema must reject deferred kind: ${postKind}`);
+  }
 });
 
 Deno.test("public author carries username, not an internal id", () => {

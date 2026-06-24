@@ -45,6 +45,7 @@ import type {
   ModerationNote,
   NotificationListResponse,
   PostDetail,
+  PostKind,
   ReactionResult,
   Report,
   SetUserModerationStatusInput,
@@ -134,14 +135,15 @@ export { ApiError };
 // ---- Reads ----
 
 export async function fetchRecentFeed(
-  options: { cursor?: string; limit?: number } = {},
+  options: { cursor?: string; limit?: number; kind?: PostKind } = {},
   getToken?: GetAuthToken,
 ): Promise<FeedResponse> {
   const params = new URLSearchParams({ limit: String(options.limit ?? 20) });
   if (options.cursor) params.set("cursor", options.cursor);
+  if (options.kind) params.set("kind", options.kind);
   const data = await getJson(
     `/api/feed/recent?${params.toString()}`,
-    () => getMockFeed({ limit: options.limit ?? 20, cursor: options.cursor }),
+    () => getMockFeed({ limit: options.limit ?? 20, cursor: options.cursor, kind: options.kind }),
     getToken,
   );
   return FeedResponseSchema.parse(data);

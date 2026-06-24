@@ -385,6 +385,15 @@ textarea:focus-visible,
     background: var(--accent-soft);
   }
 
+  /* Per-type filter dot: reads the kind color from the link's data-kind. */
+  .rail-item__dot {
+    width: 0.62rem;
+    height: 0.62rem;
+    flex: 0 0 auto;
+    border-radius: 999px;
+    background: oklch(var(--kind, var(--color-ink)));
+  }
+
   .rail-foot {
     margin-top: auto;
     display: flex;
@@ -817,6 +826,80 @@ textarea:focus-visible,
     display: none;
   }
 
+  /* ---- YouTube detail embed --------------------------------------------- */
+  .yt-embed {
+    position: relative;
+    aspect-ratio: 16 / 9;
+    width: 100%;
+    overflow: hidden;
+    border-radius: var(--radius-card);
+    border: 1px solid var(--line);
+    background: oklch(var(--color-newsprint));
+  }
+
+  .yt-embed__frame,
+  .yt-embed__frame iframe {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    border: 0;
+    display: block;
+  }
+
+  /* Opaque cover so the broken YouTube placeholder never peeks through. */
+  .yt-embed__fallback {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-content: center;
+    justify-items: center;
+    gap: 0.45rem;
+    padding: 1.25rem;
+    text-align: center;
+    background: oklch(var(--color-newsprint));
+  }
+
+  .yt-embed__icon {
+    color: oklch(var(--kind-youtube));
+  }
+
+  .yt-embed__title {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 800;
+    color: oklch(var(--color-ink));
+  }
+
+  .yt-embed__note {
+    margin: 0;
+    max-width: 34ch;
+    font-size: 0.86rem;
+    font-weight: 650;
+    line-height: 1.45;
+    color: var(--muted);
+  }
+
+  .yt-embed__cta {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin-top: 0.35rem;
+    padding: 0.5rem 0.85rem;
+    border-radius: var(--radius-control);
+    /* YouTube red with dark ink text — same pairing as our per-kind pills, and
+       legible in both themes (white on this red fails contrast). */
+    background: oklch(var(--kind-youtube));
+    color: oklch(var(--color-pitch-ink));
+    font-size: 0.85rem;
+    font-weight: 800;
+    text-decoration: none;
+  }
+
+  .yt-embed__cta:hover {
+    background: color-mix(in oklch, oklch(var(--kind-youtube)), oklch(var(--color-pitch-ink)) 12%);
+  }
+
   /* ---- Reposts / quote posts -------------------------------------------- */
   .reshare-media {
     display: grid;
@@ -1078,6 +1161,7 @@ textarea:focus-visible,
     font-size: 0.9rem;
     font-weight: 600;
     line-height: 1;
+    white-space: nowrap;
     text-decoration: none;
     transition:
       transform var(--motion-tap) var(--ease-out-expo),
@@ -1105,7 +1189,10 @@ textarea:focus-visible,
     color: oklch(var(--color-pitch));
   }
 
+  /* Re-assert the signal fill: .tool-button:hover (0,2,0) would otherwise repaint
+     the bg to newsprint and leave near-white pitch text invisible in light mode. */
   .tool-button.bg-signal:hover {
+    background: oklch(var(--color-signal));
     filter: brightness(1.06);
   }
 
@@ -1131,6 +1218,25 @@ textarea:focus-visible,
 
   .icon-button:active {
     transform: scale(0.96);
+  }
+
+  /* The admin entry stands apart from utility icons: brand accent + soft fill,
+     and a solid fill while you're in the console. */
+  .icon-button--admin {
+    flex: 0 0 auto;
+    border-color: oklch(var(--color-signal) / 0.4);
+    background: var(--accent-soft);
+    color: oklch(var(--color-signal));
+  }
+
+  .icon-button--admin:hover {
+    background: oklch(var(--color-signal) / 0.2);
+  }
+
+  .icon-button--admin.is-active {
+    border-color: transparent;
+    background: oklch(var(--color-signal));
+    color: oklch(var(--color-pitch));
   }
 
   .notification-bell {
@@ -1431,36 +1537,114 @@ textarea:focus-visible,
 
   .admin-workbench {
     display: grid;
+    gap: 0.9rem;
+  }
+
+  .admin-workbench__main {
+    display: grid;
     gap: 1rem;
   }
 
-  .admin-workbench__header {
+  .admin-workbench__masthead {
+    position: relative;
     display: grid;
-    gap: 0.55rem;
+    gap: 1rem;
+    overflow: hidden;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-card);
+    background: oklch(var(--color-paper));
+    padding: 1.25rem 1rem 1rem;
+  }
+
+  .admin-workbench__masthead::before {
+    position: absolute;
+    inset: 0 0 auto;
+    height: 5px;
+    background: oklch(var(--color-signal));
+    content: "";
+  }
+
+  .admin-workbench__identity {
+    display: grid;
+    gap: 0.45rem;
+  }
+
+  .admin-workbench__title {
+    font-size: 1.8rem;
+    font-weight: 800;
   }
 
   .admin-workbench__summary {
-    max-width: 68ch;
+    max-width: 62ch;
+    margin: 0;
     color: var(--muted);
     font-size: 0.92rem;
-    font-weight: 600;
+    font-weight: 650;
     line-height: 1.45;
+    text-wrap: pretty;
+  }
+
+  .admin-case-tape {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.4rem;
+    margin: 0;
+    border-radius: var(--radius-control);
+    background: oklch(var(--color-newsprint));
+    padding: 0.4rem;
+  }
+
+  .admin-case-tape__item {
+    display: grid;
+    min-width: 0;
+    min-height: 3.6rem;
+    align-content: center;
+    gap: 0.15rem;
+    border-radius: 10px;
+    background: oklch(var(--color-paper));
+    padding: 0.55rem 0.65rem;
+  }
+
+  .admin-case-tape__item--open {
+    background: oklch(var(--color-signal) / 0.12);
+  }
+
+  .admin-case-tape dt {
+    overflow: hidden;
+    color: var(--muted);
+    font-size: 0.66rem;
+    font-weight: 800;
+    line-height: 1.1;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .admin-case-tape dd {
+    margin: 0;
+    color: oklch(var(--color-ink));
+    font-family: var(--font-display);
+    font-size: 1.35rem;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
   }
 
   .admin-section-title {
-    font-size: 1.05rem;
+    margin: 0;
+    font-size: 1.02rem;
     font-weight: 900;
     line-height: 1.2;
   }
 
   .admin-queue,
-  .admin-audit {
+  .admin-audit,
+  .admin-tags {
     display: grid;
     gap: 1rem;
     padding: 1rem;
   }
 
-  .admin-queue__top {
+  .admin-panel-heading {
     display: flex;
     align-items: start;
     justify-content: space-between;
@@ -1474,6 +1658,7 @@ textarea:focus-visible,
     display: inline-flex;
     min-height: 1.55rem;
     align-items: center;
+    gap: 0.3rem;
     border: 1px solid var(--line);
     border-radius: 999px;
     padding-inline: 0.55rem;
@@ -1507,12 +1692,33 @@ textarea:focus-visible,
 
   .admin-status-chip--actioned {
     background: oklch(var(--color-cyan) / 0.16);
-    color: oklch(var(--color-cyan));
+    color: color-mix(in oklch, oklch(var(--color-cyan)), oklch(var(--color-ink)) 35%);
+  }
+
+  .admin-panel-copy {
+    margin: 0.25rem 0 0;
+    max-width: 58ch;
+    color: var(--muted);
+    font-size: 0.82rem;
+    font-weight: 650;
+    line-height: 1.4;
   }
 
   .admin-filter-bar {
     display: grid;
-    gap: 0.65rem;
+    gap: 0.7rem;
+    border-radius: var(--radius-control);
+    background: oklch(var(--color-newsprint));
+    padding: 0.75rem;
+  }
+
+  .admin-filter-bar__label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    color: oklch(var(--color-ink));
+    font-size: 0.78rem;
+    font-weight: 850;
   }
 
   .admin-filter {
@@ -1525,6 +1731,7 @@ textarea:focus-visible,
     color: var(--muted);
     font-size: 0.72rem;
     font-weight: 800;
+    line-height: 1.2;
   }
 
   .admin-user-status strong {
@@ -1540,6 +1747,7 @@ textarea:focus-visible,
     padding: 0.75rem;
     font-size: 0.84rem;
     font-weight: 800;
+    line-height: 1.35;
   }
 
   .admin-bulk-bar {
@@ -1549,6 +1757,21 @@ textarea:focus-visible,
     border-radius: var(--radius-control);
     background: var(--accent-soft);
     padding: 0.75rem;
+  }
+
+  .admin-bulk-bar__title {
+    margin: 0;
+    color: oklch(var(--color-ink));
+    font-size: 0.9rem;
+    font-weight: 900;
+  }
+
+  .admin-bulk-bar__hint {
+    margin: 0.15rem 0 0.65rem;
+    color: var(--muted);
+    font-size: 0.78rem;
+    font-weight: 700;
+    line-height: 1.35;
   }
 
   .admin-bulk-bar__note {
@@ -1579,6 +1802,16 @@ textarea:focus-visible,
     font-weight: 800;
   }
 
+  .admin-empty p {
+    margin: 0;
+  }
+
+  .admin-empty span {
+    color: var(--muted);
+    font-size: 0.78rem;
+    font-weight: 650;
+  }
+
   .admin-empty--inline {
     min-height: 4rem;
     margin: 0;
@@ -1586,27 +1819,89 @@ textarea:focus-visible,
 
   .admin-report-list {
     display: grid;
-    gap: 0.75rem;
+    gap: 0.7rem;
   }
 
   .admin-report-row {
     display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
-    gap: 0.75rem;
+    grid-template-columns: 2rem minmax(0, 1fr);
+    gap: 0.65rem;
     border: 1px solid var(--line);
-    border-radius: var(--radius-control);
-    background: oklch(var(--color-newsprint));
+    border-radius: 14px;
+    background: oklch(var(--color-paper));
     padding: 0.75rem;
+    transition:
+      border-color var(--motion-state) var(--ease-out-quart),
+      background-color var(--motion-state) var(--ease-out-quart),
+      transform var(--motion-tap) var(--ease-out-expo);
+  }
+
+  .admin-report-row:hover {
+    border-color: var(--line-strong);
+    background: color-mix(in oklch, oklch(var(--color-paper)), oklch(var(--color-newsprint)) 52%);
+  }
+
+  .admin-report-row--selected {
+    border-color: oklch(var(--color-signal) / 0.52);
+    background: color-mix(in oklch, oklch(var(--color-paper)), oklch(var(--color-signal)) 7%);
+    box-shadow: inset 0 0 0 1px oklch(var(--color-signal) / 0.22);
   }
 
   .admin-report-row__select {
-    padding-top: 0.25rem;
+    position: relative;
+    display: grid;
+    width: 2rem;
+    height: 2rem;
+    place-items: center;
+    padding-top: 0.1rem;
+    cursor: pointer;
   }
 
   .admin-report-row__select input {
-    width: 1.05rem;
-    height: 1.05rem;
-    accent-color: oklch(var(--color-signal));
+    position: absolute;
+    width: 1.35rem;
+    height: 1.35rem;
+    margin: 0;
+    cursor: pointer;
+    opacity: 0;
+  }
+
+  .admin-report-row__select span {
+    position: relative;
+    display: block;
+    width: 1.25rem;
+    height: 1.25rem;
+    border: 1.5px solid var(--line-strong);
+    border-radius: 0.35rem;
+    background: oklch(var(--color-newsprint));
+  }
+
+  .admin-report-row__select span::after {
+    position: absolute;
+    top: 0.16rem;
+    left: 0.38rem;
+    width: 0.35rem;
+    height: 0.65rem;
+    border: solid oklch(var(--color-pitch));
+    border-width: 0 2px 2px 0;
+    content: "";
+    transform: rotate(45deg) scale(0);
+    transform-origin: 50% 60%;
+    transition: transform var(--motion-state) var(--ease-out-expo);
+  }
+
+  .admin-report-row__select input:checked + span {
+    border-color: transparent;
+    background: oklch(var(--color-signal));
+  }
+
+  .admin-report-row__select input:checked + span::after {
+    transform: rotate(45deg) scale(1);
+  }
+
+  .admin-report-row__select input:focus-visible + span {
+    outline: 2px solid oklch(var(--color-signal));
+    outline-offset: 2px;
   }
 
   .admin-report-row__body {
@@ -1635,7 +1930,21 @@ textarea:focus-visible,
     font-weight: 900;
   }
 
-  .admin-report-row__details {
+  .admin-report-row__evidence {
+    display: grid;
+    gap: 0.3rem;
+    border-radius: 10px;
+    background: oklch(var(--color-newsprint));
+    padding: 0.65rem 0.75rem;
+  }
+
+  .admin-report-row__evidence span {
+    color: var(--muted);
+    font-size: 0.7rem;
+    font-weight: 850;
+  }
+
+  .admin-report-row__evidence p {
     margin: 0;
     color: oklch(var(--color-ink));
     font-size: 0.92rem;
@@ -1653,10 +1962,9 @@ textarea:focus-visible,
     display: grid;
     grid-template-columns: auto minmax(0, 1fr);
     gap: 0.45rem;
-    border: 1px solid var(--line);
     border-radius: 10px;
-    background: oklch(var(--color-paper));
-    padding: 0.55rem;
+    background: oklch(var(--color-newsprint));
+    padding: 0.6rem;
     color: var(--muted);
   }
 
@@ -1697,8 +2005,9 @@ textarea:focus-visible,
   .admin-user-status {
     display: grid;
     gap: 0.75rem;
-    border-top: 1px solid var(--line);
-    padding-top: 0.75rem;
+    border-radius: 10px;
+    background: oklch(var(--color-newsprint));
+    padding: 0.75rem;
   }
 
   .admin-user-status__row {
@@ -1708,13 +2017,27 @@ textarea:focus-visible,
 
   .admin-report-actions {
     border-top: 1px solid var(--line);
-    padding-top: 0.75rem;
+    padding-top: 0.8rem;
   }
 
-  .admin-report-actions .tool-button,
   .admin-user-status .tool-button,
   .admin-bulk-bar__actions .tool-button {
     flex: 1 1 9.5rem;
+  }
+
+  /* Report actions read as a decision row: natural-width buttons clustered to the
+     right, primary (Mark actioned) last. Destructive Remove sits apart on the left. */
+  .admin-report-actions {
+    justify-content: flex-end;
+  }
+
+  .admin-report-actions .tool-button {
+    padding-inline: 0.75rem;
+    gap: 0.35rem;
+  }
+
+  .admin-report-actions > .admin-danger-button {
+    margin-inline-end: auto;
   }
 
   .admin-danger-button {
@@ -1737,7 +2060,7 @@ textarea:focus-visible,
     gap: 0.55rem;
     align-items: start;
     border-top: 1px solid var(--line);
-    padding-top: 0.55rem;
+    padding-top: 0.65rem;
   }
 
   .admin-audit-event:first-child {
@@ -1747,16 +2070,29 @@ textarea:focus-visible,
 
   .admin-tag-form {
     display: grid;
-    gap: 0.6rem;
+    gap: 0.7rem;
+    border-radius: var(--radius-control);
+    background: oklch(var(--color-newsprint));
+    padding: 0.75rem;
   }
 
   .admin-tag-row {
     display: grid;
     gap: 0.75rem;
     border: 1px solid var(--line);
-    border-radius: var(--radius-control);
-    background: oklch(var(--color-newsprint));
+    border-radius: 14px;
+    background: oklch(var(--color-paper));
     padding: 0.8rem;
+  }
+
+  .admin-tag-row--disabled,
+  .admin-tag-row--blocked {
+    background: oklch(var(--color-newsprint));
+  }
+
+  .admin-tag-grid {
+    display: grid;
+    gap: 0.75rem;
   }
 
   .admin-tag-row__head,
@@ -1767,6 +2103,74 @@ textarea:focus-visible,
 
   .admin-tag-row__head {
     align-items: start;
+  }
+
+  .admin-tag-row__slug {
+    margin: 0;
+    color: oklch(var(--color-ink));
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", monospace;
+    font-size: 0.9rem;
+    font-weight: 900;
+    overflow-wrap: anywhere;
+  }
+
+  .admin-tag-row__name {
+    margin: 0.2rem 0 0;
+    color: oklch(var(--color-ink));
+    font-size: 0.9rem;
+    font-weight: 750;
+    line-height: 1.25;
+  }
+
+  .admin-tag-row__meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin-top: 0.45rem;
+  }
+
+  .admin-tag-row__meta span {
+    display: inline-flex;
+    min-height: 1.45rem;
+    align-items: center;
+    border-radius: 999px;
+    background: oklch(var(--color-newsprint));
+    color: var(--muted);
+    padding-inline: 0.5rem;
+    font-size: 0.7rem;
+    font-weight: 800;
+    text-transform: capitalize;
+  }
+
+  .admin-tag-row__aliases {
+    margin: 0.45rem 0 0;
+    color: var(--muted);
+    font-size: 0.76rem;
+    font-weight: 650;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+  }
+
+  .admin-mono-field {
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", monospace;
+    font-size: 0.86rem;
+  }
+
+  .admin-shell-state {
+    display: grid;
+    min-height: 14rem;
+    place-items: center;
+    gap: 0.6rem;
+    background: oklch(var(--color-newsprint));
+    padding: 1.25rem;
+    text-align: center;
+  }
+
+  .admin-shell-state p {
+    margin: 0;
+    color: oklch(var(--color-ink));
+    font-size: 0.92rem;
+    font-weight: 900;
   }
 
   .meta-label {
@@ -1840,23 +2244,28 @@ textarea:focus-visible,
   }
 
   @media (min-width: 720px) {
-    .admin-workbench__header {
-      grid-template-columns: minmax(0, 1fr) minmax(18rem, 0.82fr);
-      align-items: end;
+    .admin-workbench__masthead {
+      grid-template-columns: minmax(0, 1fr) minmax(20rem, 0.78fr);
+      align-items: stretch;
+      padding: 1.1rem;
+    }
+
+    .admin-case-tape {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
     }
 
     .admin-filter-bar {
-      grid-template-columns: repeat(3, minmax(0, 1fr));
+      grid-template-columns: auto repeat(3, minmax(0, 1fr));
+      align-items: end;
+    }
+
+    .admin-filter-bar__label {
+      min-height: var(--control-height);
     }
 
     .admin-bulk-bar {
       grid-template-columns: minmax(0, 1fr) auto;
       align-items: end;
-    }
-
-    .admin-report-row__head {
-      grid-template-columns: minmax(0, 1fr) auto;
-      align-items: start;
     }
 
     .admin-note-form {
@@ -1870,15 +2279,21 @@ textarea:focus-visible,
 
     .admin-tag-form {
       grid-template-columns: minmax(8rem, 0.8fr) minmax(10rem, 1fr) minmax(12rem, 1.4fr) auto;
-      align-items: center;
+      align-items: end;
+    }
+
+    .admin-tag-form .tool-button {
+      min-height: var(--control-height);
     }
 
     .admin-tag-row__head {
       grid-template-columns: minmax(0, 1fr) auto;
     }
 
+    /* alias and merge each get their own input + button row, so a tag card stays
+       compact enough to sit two-up in the grid below. */
     .admin-tag-row__tools {
-      grid-template-columns: minmax(8rem, 1fr) auto minmax(8rem, 1fr) auto;
+      grid-template-columns: minmax(0, 1fr) auto;
       align-items: center;
     }
   }
@@ -2252,11 +2667,44 @@ textarea:focus-visible,
     padding: 1.5rem 0 3rem;
   }
 
-  /* Reading-oriented pages (post, create, profile, admin) stay at a comfortable
-     narrow width and centered, even though the main column is now wide. */
+  /* Reading-oriented pages (post, create, profile) stay at a comfortable narrow
+     width and centered, even though the main column is now wide. */
   .app-main > .route-transition {
     max-width: 42rem;
     margin-inline: auto;
+  }
+
+  /* Console mode: no rails, so the workbench takes the full centered width and
+     splits the queue from a sticky audit companion. */
+  .app-shell--console {
+    grid-template-columns: minmax(0, 1fr);
+    max-width: 68rem;
+  }
+
+  .app-shell--console .app-main {
+    grid-column: 1;
+  }
+
+  .app-shell--console .app-main > .route-transition {
+    max-width: none;
+  }
+
+  .admin-workbench__main {
+    grid-template-columns: minmax(0, 2.3fr) minmax(14rem, 0.8fr);
+    align-items: start;
+  }
+
+  .admin-workbench__main .admin-audit {
+    position: sticky;
+    top: calc(var(--header-h) + 1rem);
+    max-height: calc(100dvh - var(--header-h) - 2rem);
+    overflow-y: auto;
+  }
+
+  /* Several curated tags read better as a two-up management grid than a long
+     sparse column once the rails are gone. */
+  .admin-tag-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -2280,6 +2728,12 @@ textarea:focus-visible,
     overflow-y: auto;
     padding: 1.5rem 0;
     border-left: 1px solid var(--line);
+  }
+
+  /* Console has no rails — stay single-column and a touch wider than the feed. */
+  .app-shell--console {
+    grid-template-columns: minmax(0, 1fr);
+    max-width: 72rem;
   }
 }
 

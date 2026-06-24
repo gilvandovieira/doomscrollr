@@ -4,6 +4,8 @@ import {
   createRouter,
   lazyRouteComponent,
 } from "@tanstack/react-router";
+import { PostKindSchema } from "@doomscrollr/shared/schemas/post.schema.ts";
+import type { PostKind } from "@doomscrollr/shared/types.ts";
 import { AppLayout } from "../components/AppLayout.tsx";
 import { FeedPage } from "../features/feed/FeedPage.tsx";
 
@@ -15,6 +17,12 @@ const rootRoute = createRootRoute({ component: AppLayout });
 const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/",
+  // ?kind=… narrows the feed to one post type (sidebar filter). Anything else
+  // (missing or unknown) means the unfiltered recent feed.
+  validateSearch: (search: Record<string, unknown>): { kind?: PostKind } => {
+    const result = PostKindSchema.safeParse(search.kind);
+    return result.success ? { kind: result.data } : {};
+  },
   component: FeedPage,
 });
 

@@ -13,11 +13,16 @@ import {
   Ban,
   CheckCircle2,
   ClipboardCheck,
+  Filter,
+  GitMerge,
   History,
+  Plus,
+  Power,
   RotateCcw,
   ShieldAlert,
   ShieldCheck,
   StickyNote,
+  Tags,
   Trash2,
 } from "lucide-react";
 import type { FormEvent } from "react";
@@ -237,142 +242,187 @@ export function AdminReportsPage() {
   const reports = reportsQuery.data;
   const tags = tagsQuery.data;
   const visibleSelectedCount = reports.filter((report) => selectedIds.has(report.id)).length;
+  const openCount = reports.filter((report) => report.status === "open").length;
+  const actionedCount = reports.filter((report) => report.status === "actioned").length;
+  const userCaseCount = reports.filter((report) => report.targetType === "user").length;
+  const activeTagCount = tags.filter((tag) => tag.status === "active").length;
+  const auditEvents = auditQuery.data ?? [];
 
   return (
     <section className="admin-workbench">
-      <header className="admin-workbench__header">
-        <div>
+      <header className="admin-workbench__masthead">
+        <div className="admin-workbench__identity">
           <p className="meta-label">Moderator console</p>
-          <h1 className="mobile-title">Admin</h1>
+          <h1 className="mobile-title admin-workbench__title">Admin docket</h1>
+          <p className="admin-workbench__summary">
+            Work the visible report queue, leave target notes, and keep restore decisions easy to
+            trace.
+          </p>
         </div>
-        <p className="admin-workbench__summary">
-          Filter the queue, resolve batches, leave target notes, and keep a restore history.
-        </p>
+        <dl className="admin-case-tape" aria-label="Visible queue summary">
+          <div className="admin-case-tape__item admin-case-tape__item--open">
+            <dt>Open</dt>
+            <dd>{openCount}</dd>
+          </div>
+          <div className="admin-case-tape__item">
+            <dt>Actioned</dt>
+            <dd>{actionedCount}</dd>
+          </div>
+          <div className="admin-case-tape__item">
+            <dt>User cases</dt>
+            <dd>{userCaseCount}</dd>
+          </div>
+          <div className="admin-case-tape__item">
+            <dt>Selected</dt>
+            <dd>{visibleSelectedCount}</dd>
+          </div>
+        </dl>
       </header>
 
-      <section className="hard-panel admin-queue" aria-labelledby="admin-reports-title">
-        <div className="admin-queue__top">
-          <div>
-            <p className="meta-label">Reports</p>
-            <h2 id="admin-reports-title" className="admin-section-title">
-              Moderation queue
-            </h2>
-          </div>
-          <span className="admin-count-chip">
-            {reports.length} {reports.length === 1 ? "case" : "cases"}
-          </span>
-        </div>
-
-        <div className="admin-filter-bar" aria-label="Report filters">
-          <label className="admin-filter">
-            <span>Status</span>
-            <select
-              className="field-control"
-              value={filters.status}
-              onChange={(event) =>
-                updateFilter("status", event.currentTarget.value as ReportFilters["status"])}
-            >
-              {STATUS_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>{option.label}</option>
-              ))}
-            </select>
-          </label>
-          <label className="admin-filter">
-            <span>Target</span>
-            <select
-              className="field-control"
-              value={filters.targetType}
-              onChange={(event) =>
-                updateFilter(
-                  "targetType",
-                  event.currentTarget.value as ReportFilters["targetType"],
-                )}
-            >
-              {TARGET_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>{option.label}</option>
-              ))}
-            </select>
-          </label>
-          <label className="admin-filter">
-            <span>Reason</span>
-            <select
-              className="field-control"
-              value={filters.reason}
-              onChange={(event) =>
-                updateFilter("reason", event.currentTarget.value as ReportFilters["reason"])}
-            >
-              <option value="all">All reasons</option>
-              {REPORT_REASONS.map((reason) => (
-                <option key={reason} value={reason}>{humanReason(reason)}</option>
-              ))}
-            </select>
-          </label>
-        </div>
-
-        {actionError && <p className="admin-error">{actionError}</p>}
-
-        {visibleSelectedCount > 0 && (
-          <div className="admin-bulk-bar">
+      <div className="admin-workbench__main">
+        <section className="hard-panel admin-queue" aria-labelledby="admin-reports-title">
+          <div className="admin-panel-heading">
             <div>
-              <p className="meta-label">{visibleSelectedCount} selected</p>
-              <textarea
-                className="field-control admin-bulk-bar__note"
-                value={bulkNote}
-                onChange={(event) => setBulkNote(event.currentTarget.value)}
-                placeholder="Optional note for selected targets"
-                rows={2}
-              />
+              <p className="meta-label">Reports</p>
+              <h2 id="admin-reports-title" className="admin-section-title">
+                Review queue
+              </h2>
+              <p className="admin-panel-copy">{formatFilterSummary(filters)}</p>
             </div>
-            <div className="admin-bulk-bar__actions">
-              <button type="button" className="tool-button" onClick={() => runBulk("dismissed")}>
-                <CheckCircle2 size={16} aria-hidden="true" />
-                Dismiss
-              </button>
-              <button
-                type="button"
-                className="tool-button bg-signal text-pitch"
-                onClick={() => runBulk("actioned")}
-              >
-                <ClipboardCheck size={16} aria-hidden="true" />
-                Mark actioned
-              </button>
-            </div>
+            <span className="admin-count-chip">
+              {reports.length} {reports.length === 1 ? "case" : "cases"}
+            </span>
           </div>
-        )}
 
-        {reports.length === 0
-          ? (
-            <div className="admin-empty">
-              <ShieldCheck size={22} aria-hidden="true" />
-              <p>No reports match these filters.</p>
+          <div className="admin-filter-bar" aria-label="Report filters">
+            <div className="admin-filter-bar__label">
+              <Filter size={16} aria-hidden="true" />
+              <span>Filter cases</span>
             </div>
-          )
-          : (
-            <div className="admin-report-list">
-              {reports.map((report) => (
-                <ReportRow
-                  key={report.id}
-                  report={report}
-                  selected={selectedIds.has(report.id)}
-                  onToggleSelected={() => toggleReport(report.id)}
-                  onAction={run}
-                  onNote={addNote}
-                  onUserStatus={updateUserStatus}
-                  onUserTrustLevel={updateUserTrustLevel}
+            <label className="admin-filter">
+              <span>Status</span>
+              <select
+                className="field-control"
+                value={filters.status}
+                onChange={(event) =>
+                  updateFilter("status", event.currentTarget.value as ReportFilters["status"])}
+              >
+                {STATUS_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+            </label>
+            <label className="admin-filter">
+              <span>Target</span>
+              <select
+                className="field-control"
+                value={filters.targetType}
+                onChange={(event) =>
+                  updateFilter(
+                    "targetType",
+                    event.currentTarget.value as ReportFilters["targetType"],
+                  )}
+              >
+                {TARGET_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+            </label>
+            <label className="admin-filter">
+              <span>Reason</span>
+              <select
+                className="field-control"
+                value={filters.reason}
+                onChange={(event) =>
+                  updateFilter("reason", event.currentTarget.value as ReportFilters["reason"])}
+              >
+                <option value="all">All reasons</option>
+                {REPORT_REASONS.map((reason) => (
+                  <option key={reason} value={reason}>{humanReason(reason)}</option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          {actionError && <p className="admin-error">{actionError}</p>}
+
+          {visibleSelectedCount > 0 && (
+            <div className="admin-bulk-bar" aria-label="Bulk report actions">
+              <div>
+                <p className="admin-bulk-bar__title">
+                  {visibleSelectedCount} selected for batch review
+                </p>
+                <p className="admin-bulk-bar__hint">
+                  Add one note before resolving every selected visible case.
+                </p>
+                <textarea
+                  className="field-control admin-bulk-bar__note"
+                  value={bulkNote}
+                  onChange={(event) =>
+                    setBulkNote(event.currentTarget.value)}
+                  placeholder="Optional note for selected targets"
+                  aria-label="Optional note for selected targets"
+                  rows={2}
                 />
-              ))}
+              </div>
+              <div className="admin-bulk-bar__actions">
+                <button
+                  type="button"
+                  className="tool-button"
+                  onClick={() =>
+                    runBulk("dismissed")}
+                >
+                  <CheckCircle2 size={16} aria-hidden="true" />
+                  Dismiss
+                </button>
+                <button
+                  type="button"
+                  className="tool-button bg-signal text-pitch"
+                  onClick={() => runBulk("actioned")}
+                >
+                  <ClipboardCheck size={16} aria-hidden="true" />
+                  Mark actioned
+                </button>
+              </div>
             </div>
           )}
-      </section>
 
-      <AuditPanel
-        events={auditQuery.data ?? []}
-        loading={auditQuery.isPending}
-        error={auditQuery.isError}
-      />
+          {reports.length === 0
+            ? (
+              <div className="admin-empty">
+                <ShieldCheck size={22} aria-hidden="true" />
+                <p>No reports match these filters.</p>
+                <span>Try widening the status, target, or reason filter.</span>
+              </div>
+            )
+            : (
+              <div className="admin-report-list">
+                {reports.map((report) => (
+                  <ReportRow
+                    key={report.id}
+                    report={report}
+                    selected={selectedIds.has(report.id)}
+                    onToggleSelected={() => toggleReport(report.id)}
+                    onAction={run}
+                    onNote={addNote}
+                    onUserStatus={updateUserStatus}
+                    onUserTrustLevel={updateUserTrustLevel}
+                  />
+                ))}
+              </div>
+            )}
+        </section>
+
+        <AuditPanel
+          events={auditEvents}
+          loading={auditQuery.isPending}
+          error={auditQuery.isError}
+        />
+      </div>
 
       <AdminTagsPanel
         tags={tags}
+        activeCount={activeTagCount}
         error={tagError}
         onCreate={createTag}
         onAction={runTagAction}
@@ -383,11 +433,13 @@ export function AdminReportsPage() {
 
 function AdminTagsPanel({
   tags,
+  activeCount,
   error,
   onCreate,
   onAction,
 }: {
   tags: AdminTag[];
+  activeCount: number;
   error: string | null;
   onCreate: (input: CreateAdminTagInput) => Promise<void>;
   onAction: (path: string, body?: unknown) => Promise<void>;
@@ -425,53 +477,74 @@ function AdminTagsPanel({
   }
 
   return (
-    <div className="hard-panel space-y-4 p-4">
-      <div>
-        <p className="meta-label">Curated tags</p>
-        <h2 className="admin-section-title">Tag controls</h2>
+    <section className="hard-panel admin-tags" aria-labelledby="admin-tags-title">
+      <div className="admin-panel-heading">
+        <div>
+          <p className="meta-label">Curated tags</p>
+          <h2 id="admin-tags-title" className="admin-section-title">Tag controls</h2>
+          <p className="admin-panel-copy">
+            Canonicalize meme labels before they fragment the feed.
+          </p>
+        </div>
+        <span className="admin-count-chip">
+          <Tags size={14} aria-hidden="true" />
+          {activeCount}/{tags.length} active
+        </span>
       </div>
 
       <form onSubmit={submit} className="admin-tag-form">
-        <input
-          value={form.slug}
-          onChange={(event) => setForm((current) => ({ ...current, slug: event.target.value }))}
-          placeholder="slug"
-          className="field-control min-h-11 px-3 font-mono text-sm"
-          required
-        />
-        <input
-          value={form.displayName}
-          onChange={(event) =>
-            setForm((current) => ({ ...current, displayName: event.target.value }))}
-          placeholder="Display name"
-          className="field-control min-h-11 px-3 text-sm"
-          required
-        />
-        <input
-          value={form.description ?? ""}
-          onChange={(event) =>
-            setForm((current) => ({ ...current, description: event.target.value }))}
-          placeholder="Description"
-          className="field-control min-h-11 px-3 text-sm"
-        />
+        <label className="admin-filter">
+          <span>Slug</span>
+          <input
+            value={form.slug}
+            onChange={(event) => setForm((current) => ({ ...current, slug: event.target.value }))}
+            placeholder="wholesome-chaos"
+            className="field-control admin-mono-field"
+            required
+          />
+        </label>
+        <label className="admin-filter">
+          <span>Display name</span>
+          <input
+            value={form.displayName}
+            onChange={(event) =>
+              setForm((current) => ({ ...current, displayName: event.target.value }))}
+            placeholder="Wholesome chaos"
+            className="field-control"
+            required
+          />
+        </label>
+        <label className="admin-filter">
+          <span>Description</span>
+          <input
+            value={form.description ?? ""}
+            onChange={(event) =>
+              setForm((current) => ({ ...current, description: event.target.value }))}
+            placeholder="Short curator note"
+            className="field-control"
+          />
+        </label>
         <button type="submit" className="tool-button bg-signal text-pitch">
+          <Plus size={16} aria-hidden="true" />
           Create tag
         </button>
       </form>
 
-      {error && <p className="meta-label text-oxide">{error}</p>}
+      {error && <p className="admin-error">{error}</p>}
 
-      <div className="space-y-3">
+      <div className="admin-tag-grid">
         {tags.map((tag) => (
-          <article key={tag.slug} className="admin-tag-row">
+          <article key={tag.slug} className={`admin-tag-row admin-tag-row--${tag.status}`}>
             <div className="admin-tag-row__head">
               <div>
-                <p className="font-mono text-sm font-black">#{tag.slug}</p>
-                <p className="meta-label">
-                  {tag.status} - {tag.postCount} {tag.postCount === 1 ? "post" : "posts"}
-                </p>
+                <p className="admin-tag-row__slug">#{tag.slug}</p>
+                <p className="admin-tag-row__name">{tag.displayName}</p>
+                <div className="admin-tag-row__meta">
+                  <span>{tag.status}</span>
+                  <span>{tag.postCount} {tag.postCount === 1 ? "post" : "posts"}</span>
+                </div>
                 {tag.aliases.length > 0 && (
-                  <p className="meta-label">
+                  <p className="admin-tag-row__aliases">
                     aliases: {tag.aliases.map((alias) => `#${alias}`).join(", ")}
                   </p>
                 )}
@@ -482,6 +555,7 @@ function AdminTagsPanel({
                 onClick={() =>
                   onAction(`tags/${tag.slug}/${tag.status === "active" ? "disable" : "enable"}`)}
               >
+                <Power size={16} aria-hidden="true" />
                 {tag.status === "active" ? "Disable" : "Enable"}
               </button>
             </div>
@@ -492,9 +566,16 @@ function AdminTagsPanel({
                 onChange={(event) =>
                   setAliasDrafts((current) => ({ ...current, [tag.slug]: event.target.value }))}
                 placeholder="alias slug"
-                className="field-control min-h-10 px-3 font-mono text-sm"
+                aria-label={`Alias slug for ${tag.displayName}`}
+                className="field-control admin-mono-field"
               />
-              <button type="button" className="tool-button" onClick={() => addAlias(tag)}>
+              <button
+                type="button"
+                className="tool-button"
+                onClick={() =>
+                  addAlias(tag)}
+              >
+                <Plus size={16} aria-hidden="true" />
                 Add alias
               </button>
               <input
@@ -502,16 +583,23 @@ function AdminTagsPanel({
                 onChange={(event) =>
                   setMergeDrafts((current) => ({ ...current, [tag.slug]: event.target.value }))}
                 placeholder="merge into slug"
-                className="field-control min-h-10 px-3 font-mono text-sm"
+                aria-label={`Merge ${tag.displayName} into tag slug`}
+                className="field-control admin-mono-field"
               />
-              <button type="button" className="tool-button" onClick={() => mergeInto(tag)}>
+              <button
+                type="button"
+                className="tool-button"
+                onClick={() =>
+                  mergeInto(tag)}
+              >
+                <GitMerge size={16} aria-hidden="true" />
                 Merge
               </button>
             </div>
           </article>
         ))}
       </div>
-    </div>
+    </section>
   );
 }
 
@@ -545,7 +633,7 @@ function ReportRow({
   }
 
   return (
-    <article className="admin-report-row">
+    <article className={`admin-report-row ${selected ? "admin-report-row--selected" : ""}`}>
       <label className="admin-report-row__select">
         <input
           type="checkbox"
@@ -553,28 +641,28 @@ function ReportRow({
           onChange={onToggleSelected}
           aria-label={`Select report for ${report.targetType} ${code}`}
         />
+        <span aria-hidden="true" />
       </label>
 
       <div className="admin-report-row__body">
         <div className="admin-report-row__head">
-          <div>
-            <div className="admin-report-row__target">
-              <span className="admin-type-chip">{report.targetType}</span>
-              <strong>{code}</strong>
-              <span className={`admin-status-chip admin-status-chip--${report.status}`}>
-                {report.status}
-              </span>
-            </div>
-            <p className="meta-label">
-              Reported by @{report.reporter.username} - {formatDate(report.createdAt)}
-            </p>
+          <div className="admin-report-row__target">
+            <span className="admin-type-chip">{report.targetType}</span>
+            <strong>{code}</strong>
+            <span className={`admin-status-chip admin-status-chip--${report.status}`}>
+              {report.status}
+            </span>
+            <span className="admin-reason-pill">{humanReason(report.reason)}</span>
           </div>
-          <span className="admin-reason-pill">{humanReason(report.reason)}</span>
+          <p className="meta-label">
+            Reported by @{report.reporter.username} at {formatDate(report.createdAt)}
+          </p>
         </div>
 
-        <p className="admin-report-row__details">
-          {report.details?.trim() || "No reporter details."}
-        </p>
+        <div className="admin-report-row__evidence">
+          <span>Reporter detail</span>
+          <p>{report.details?.trim() || "No reporter details."}</p>
+        </div>
 
         {report.notes.length > 0 && (
           <div className="admin-note-list" aria-label="Moderator notes">
@@ -596,6 +684,7 @@ function ReportRow({
             value={noteDraft}
             onChange={(event) => setNoteDraft(event.currentTarget.value)}
             placeholder="Add moderator note"
+            aria-label={`Add moderator note for ${report.targetType} ${code}`}
             rows={2}
           />
           <button type="submit" className="tool-button" disabled={!noteDraft.trim()}>
@@ -605,7 +694,7 @@ function ReportRow({
         </form>
 
         {report.targetType === "user" && (
-          <div className="admin-user-status">
+          <div className="admin-user-status" aria-label={`User controls for ${code}`}>
             <div className="admin-user-status__row">
               <span>
                 Account status: <strong>{report.targetUserStatus ?? "unknown"}</strong>
@@ -654,7 +743,10 @@ function ReportRow({
           </div>
         )}
 
-        <div className="admin-report-actions">
+        <div
+          className="admin-report-actions"
+          aria-label={`Actions for ${report.targetType} ${code}`}
+        >
           {report.targetType === "post" && (
             <>
               <button
@@ -730,10 +822,15 @@ function AuditPanel({
 }) {
   return (
     <section className="hard-panel admin-audit" aria-labelledby="admin-audit-title">
-      <div className="admin-queue__top">
+      <div className="admin-panel-heading">
         <div>
           <p className="meta-label">History</p>
           <h2 id="admin-audit-title" className="admin-section-title">Audit log</h2>
+          <p className="admin-panel-copy">
+            {events.length === 0
+              ? "Latest actions will appear here."
+              : `${events.length} recent actions`}
+          </p>
         </div>
         <History size={18} aria-hidden="true" />
       </div>
@@ -773,6 +870,13 @@ function labelAuditAction(action: ModerationAuditEvent["action"]): string {
   return action.replace(/_/g, " ");
 }
 
+function formatFilterSummary(filters: ReportFilters): string {
+  const status = filters.status === "all" ? "every status" : `${filters.status} reports`;
+  const target = filters.targetType === "all" ? "all targets" : `${filters.targetType} targets`;
+  const reason = filters.reason === "all" ? "all reasons" : humanReason(filters.reason);
+  return `Showing ${status} across ${target} for ${reason}.`;
+}
+
 function trustLevelButtonClass(trustLevel: UserTrustLevel): string {
   if (trustLevel === "limited") return "tool-button admin-danger-button";
   if (trustLevel === "admin") return "tool-button bg-signal";
@@ -789,8 +893,9 @@ function trustLevelIcon(trustLevel: UserTrustLevel) {
 
 function Shell({ message }: { message: string }) {
   return (
-    <div className="hard-panel grid min-h-60 place-items-center bg-newsprint p-6">
-      <p className="text-center text-sm font-black">{message}</p>
+    <div className="hard-panel admin-shell-state">
+      <ShieldAlert size={22} aria-hidden="true" />
+      <p>{message}</p>
     </div>
   );
 }

@@ -113,6 +113,8 @@ export const PostDetailSchema = FeedPostSchema;
 export const RecentFeedQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(MAX_FEED_LIMIT).default(DEFAULT_FEED_LIMIT),
   cursor: z.string().optional(),
+  // Optional sidebar filter: narrow the recent feed to a single post kind.
+  kind: PostKindSchema.optional(),
 });
 
 export const FeedResponseSchema = z

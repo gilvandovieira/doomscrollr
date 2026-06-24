@@ -1,17 +1,18 @@
 import { useInfiniteQuery } from "@tanstack/react-query";
+import type { PostKind } from "@doomscrollr/shared/types.ts";
 import { useAuthToken, useIsSignedIn } from "../../app/account.ts";
 import { fetchRecentFeed, fetchTagFeed } from "../../app/api.ts";
 
 // Recent feed only, keyset pagination (spec §9). Keyed by sign-in state so the
 // personalized view (the viewer's own reactions, block filtering) caches apart
-// from the logged-out view.
-export function useRecentFeed() {
+// from the logged-out view, and by the active post-kind filter (sidebar).
+export function useRecentFeed(kind?: PostKind) {
   const getToken = useAuthToken();
   const signedIn = useIsSignedIn();
   return useInfiniteQuery({
-    queryKey: ["feed", "recent", signedIn],
+    queryKey: ["feed", "recent", kind ?? "all", signedIn],
     initialPageParam: undefined as string | undefined,
-    queryFn: ({ pageParam }) => fetchRecentFeed({ cursor: pageParam, limit: 20 }, getToken),
+    queryFn: ({ pageParam }) => fetchRecentFeed({ cursor: pageParam, limit: 20, kind }, getToken),
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
   });
 }

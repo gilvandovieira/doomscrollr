@@ -1,8 +1,8 @@
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Bell, ChevronsDown, PenSquare } from "lucide-react";
+import { ArrowLeft, Bell, ChevronsDown, PenSquare, ShieldCheck } from "lucide-react";
 import { fetchNotifications } from "../app/api.ts";
-import { useAuthToken, useIsSignedIn } from "../app/account.ts";
+import { useAuthToken, useIsAdmin, useIsSignedIn } from "../app/account.ts";
 import { AuthControls } from "./AuthControls.tsx";
 import { ThemeToggle } from "./ThemeToggle.tsx";
 
@@ -67,6 +67,7 @@ export function Header() {
         </Link>
 
         <NotificationsLink />
+        <AdminConsoleLink />
 
         <span className="top-chrome__theme">
           <ThemeToggle />
@@ -74,6 +75,26 @@ export function Header() {
         <AuthControls />
       </div>
     </header>
+  );
+}
+
+// Only admins ever see this — gated on the server-verified role. The console
+// itself and every /api/admin route enforce the role again, so a hidden link is
+// a convenience, not the security boundary.
+function AdminConsoleLink() {
+  const isAdmin = useIsAdmin();
+  if (!isAdmin) return null;
+
+  return (
+    <Link
+      to="/admin/reports"
+      className="icon-button icon-button--admin"
+      aria-label="Moderation console"
+      title="Moderation console"
+      activeProps={{ className: "icon-button icon-button--admin is-active" }}
+    >
+      <ShieldCheck aria-hidden="true" size={18} strokeWidth={2.35} />
+    </Link>
   );
 }
 

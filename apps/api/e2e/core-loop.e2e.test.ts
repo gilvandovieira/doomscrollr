@@ -31,6 +31,24 @@ e2eTest("recent feed serves seeded posts to anonymous readers", async () => {
   assert(!("authorId" in friday), "public post must not leak internal authorId");
 });
 
+e2eTest("recent feed can be filtered by post kind", async () => {
+  const youtube = await api<FeedResponse>("/api/feed/recent?kind=youtube");
+  assertStatus(youtube, 200);
+  assert(youtube.json.items.length > 0, "youtube filtered feed should have seeded posts");
+  assert(
+    youtube.json.items.every((post) => post.postKind === "youtube"),
+    "youtube filtered feed should only include youtube posts",
+  );
+
+  const images = await api<FeedResponse>("/api/feed/recent?kind=external_image");
+  assertStatus(images, 200);
+  assert(images.json.items.length > 0, "image filtered feed should have seeded posts");
+  assert(
+    images.json.items.every((post) => post.postKind === "external_image"),
+    "image filtered feed should only include image-link posts",
+  );
+});
+
 e2eTest("tag directory and tag feeds serve curated discovery pages", async () => {
   const tags = await api<{ items: Tag[] }>("/api/tags");
   assertStatus(tags, 200);
@@ -271,7 +289,12 @@ e2eTest("a text post with no title takes its title from the body's first sentenc
   // An explicit title still wins over the body.
   const titled = await api<CreatePostResponse>("/api/posts", {
     asUser: USERS.maya.clerkId,
-    body: { postKind: "text", title: "My own title", bodyText: "A different first line.", tags: [] },
+    body: {
+      postKind: "text",
+      title: "My own title",
+      bodyText: "A different first line.",
+      tags: [],
+    },
   });
   assertStatus(titled, 201);
   assertEquals(titled.json.post.title, "My own title", "an explicit title is kept as-is");

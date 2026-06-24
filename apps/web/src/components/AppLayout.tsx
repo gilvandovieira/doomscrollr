@@ -7,15 +7,20 @@ import { SideRail } from "./SideRail.tsx";
 import { UsernameGate } from "./UsernameGate.tsx";
 
 export function AppLayout() {
+  const { pathname } = useLocation();
+  // The moderation console is a focused workbench, not a feed page: it drops the
+  // discovery rails and uses the full width instead of the reading column.
+  const isConsole = pathname.startsWith("/admin");
+
   return (
-    <div className="app-shell">
+    <div className={`app-shell ${isConsole ? "app-shell--console" : ""}`}>
       <Header />
-      <SideRail />
+      {!isConsole && <SideRail />}
       <main className="app-main">
         {(HAS_CLERK || HAS_TEST_AUTH) && <UsernameGate />}
         <PageTransitionOutlet />
       </main>
-      <DiscoveryRail />
+      {!isConsole && <DiscoveryRail />}
       <BottomNav />
     </div>
   );

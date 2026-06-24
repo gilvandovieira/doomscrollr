@@ -36,3 +36,10 @@ export function useAccount() {
     staleTime: 60_000,
   });
 }
+
+// Gates admin-only entry points (e.g. the moderation console link). Sourced from
+// the server-verified role in /api/account/me, never just "is signed in" — and
+// the /api/admin routes enforce the role again server-side regardless.
+export function useIsAdmin(): boolean {
+  return useAccount().data?.user?.role === "admin";
+}

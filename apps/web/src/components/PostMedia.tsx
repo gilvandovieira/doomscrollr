@@ -1,6 +1,7 @@
 import type { FeedPost } from "@doomscrollr/shared/types.ts";
 import { Link } from "@tanstack/react-router";
 import { cleanReshareTitle, sourceKindLabel } from "../lib/post-display.ts";
+import { YouTubeEmbed } from "./YouTubeEmbed.tsx";
 
 type PostMediaProps = {
   post: FeedPost;
@@ -46,17 +47,7 @@ export function PostMedia({ post, mode }: PostMediaProps) {
 
   if (post.postKind === "youtube" && post.youtubeVideoId) {
     if (mode === "detail") {
-      return (
-        <div className="aspect-video w-full overflow-hidden rounded-2xl border border-ink/10">
-          <iframe
-            title={post.title}
-            src={`https://www.youtube.com/embed/${post.youtubeVideoId}`}
-            className="h-full w-full"
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-            allowFullScreen
-          />
-        </div>
-      );
+      return <YouTubeEmbed videoId={post.youtubeVideoId} title={post.title} />;
     }
     return (
       <img

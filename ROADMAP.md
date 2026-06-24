@@ -12,8 +12,10 @@ with the v1 spec, the v1 spec wins.
 > tests pass, the web app builds, OG/feed/event read paths are verified, block filtering is pushed
 > into feed/comment SQL, the v1 funnel report script exists, and desktop/mobile browser smoke covers
 > canonical post routes plus authenticated create/comment/react/report/block flows. **Remaining v1
-> gap:** the live validation run with real testers (section 11). Verified-end-to-end items are
-> checked; live-market items remain unchecked until actual tester data exists.
+> gap:** live tester execution, funnel measurement, and feedback (`V1-090` through `V1-093`). V2
+> planning/development has already opened, so the old v1/v2 planning decision item is superseded.
+> Verified-end-to-end items are checked; live-market items remain unchecked until actual tester data
+> exists.
 
 The product bet is:
 
@@ -230,6 +232,9 @@ Goal: ship a SFW, mobile-first product that validates WhatsApp sharing and focus
 
 ### 11. V1 Validation Run
 
+_Audit 2026-06-24: implementation items are closed. `V1-090` through `V1-093` are still real
+live-run tasks, not obsolete code work; `V1-094` is closed as superseded by active v2 development._
+
 - [x] `V1-089` Seed a small set of SFW posts. _(dev seed: 4 users, 4 tags, 5 posts, comments;
       refresh for the live run.)_
 - [ ] `V1-090` Invite a small tester group.
@@ -249,7 +254,9 @@ Goal: ship a SFW, mobile-first product that validates WhatsApp sharing and focus
     still requires real tester traffic._
 - [ ] `V1-093` Collect feedback on creation, previews, mobile reading, commenting, reporting, and
       blocking.
-- [ ] `V1-094` Decide whether to iterate v1 or open v2 planning.
+- [x] `V1-094` Decide whether to iterate v1 or open v2 planning. _(obsolete/superseded: v2 planning
+      and development are already underway; live validation evidence is still tracked by `V1-090`
+      through `V1-093`.)_
 
 ## V2: Earned Milestone
 
@@ -309,12 +316,17 @@ Goal: strengthen retention, safety, and sharing only after v1 proves the loop.
       exist. _(deferred: moderation exists, but there is no logged-in user control/preferences
       surface for suggestive filtering yet; creation/public schemas continue to reject
       suggestive/mature metadata.)_
-- [ ] `V2-016` Consider one additional media provider only if users request it repeatedly.
+- [x] `V2-016` Consider one additional media provider only if users request it repeatedly.
+      _(deferred: no repeated user demand is recorded; creation schemas still reject provider GIF,
+      upload, link, GIPHY, and Tenor post kinds.)_
 
 ### Still Not V2 By Default
 
-- [ ] `V2-017` Do not add mature/adult UGC.
-- [ ] `V2-018` Do not add age verification.
+- [x] `V2-017` Do not add mature/adult UGC. _(kept out of v2: mature/adult post kinds and metadata
+      remain rejected by shared contracts; future support would require a separate
+      business/legal/compliance decision.)_
+- [x] `V2-018` Do not add age verification. _(kept out of v2: age-gate and age-verification fields
+      remain rejected by public/profile and post creation contracts.)_
 - [ ] `V2-019` Do not make AdSense or ads core architecture.
 - [ ] `V2-020` Do not add full DOOM uploads unless usage clearly earns it.
 - [ ] `V2-021` Do not add materialized ranking runs by default.
@@ -336,6 +348,10 @@ capacity, and demand.
 
 ### V3 Tasks
 
+_Audit 2026-06-24: no full V3 task is obsolete. V2 already shipped quote posts, tag aliases/merges,
+basic audit/restore history, and internal trust levels; those sub-scopes are noted below while the
+remaining V3 demand gates stay open._
+
 - [ ] `V3-006` Preserve Scrollr as the core system for:
   - users
   - profiles
@@ -350,12 +366,12 @@ capacity, and demand.
   - tags
   - provider posts
   - sharing integration
-- [ ] `V3-007` Expand post kinds only when earned:
+- [ ] `V3-007` Expand remaining post kinds only when earned:
   - link
   - provider GIF
   - uploaded image
   - uploaded GIF
-  - quote
+  - _quote already shipped in `V2-010`; it is no longer future V3 scope._
 - [ ] `V3-008` Reintroduce a media asset abstraction only if media complexity requires it.
 - [ ] `V3-009` Document per-provider state machines before adding provider complexity.
 - [ ] `V3-010` Deepen comments only if shallow comments become limiting.
@@ -384,15 +400,16 @@ capacity, and demand.
   - materialized ranking runs only if measured need exists
   - lazy/on-demand materialization for active surfaces
 - [ ] `V3-018` Add stronger discovery only if tags/profiles are insufficient:
+  - _post-kind sidebar filtering is shipped as a lightweight discovery surface._
   - search
   - profile discovery
-  - stronger tag aliases/merges
+  - _tag aliases/merges already shipped in v2; further discovery work should be demand-driven._
 - [ ] `V3-019` Choose communities or friend circles only after user behavior clarifies the need.
 - [ ] `V3-020` Expand moderation proportionally:
   - blocked tags/domains
-  - trusted-user review priority
+  - trusted-user review priority _(trust levels exist; priority behavior is not built yet.)_
   - content reclassification
-  - deeper audit/restore flows
+  - deeper audit/restore flows _(basic audit/restore history shipped in v2.)_
 - [ ] `V3-021` Add monetization only after retention and moderation are proven.
 - [ ] `V3-022` Keep monetization provider-agnostic.
 

@@ -5,6 +5,7 @@ import type {
   FeedPost,
   FeedResponse,
   PostDetail,
+  PostKind,
   Report,
   Tag,
   UserProfile,
@@ -433,18 +434,25 @@ export function getMockTagBySlug(slug: string): Tag | null {
   return tag ? toTag(tag) : null;
 }
 
-export function getMockFeed(options: { limit: number; cursor?: string }): FeedResponse {
-  return getMockFeedFromPosts(mockPosts, options);
+export function getMockFeed(
+  options: { limit: number; cursor?: string; kind?: PostKind },
+): FeedResponse {
+  const posts = options.kind
+    ? mockPosts.filter((post) => post.postKind === options.kind)
+    : mockPosts;
+  return getMockFeedFromPosts(posts, options);
 }
 
 export function getMockFeedByTag(
   slug: string,
-  options: { limit: number; cursor?: string },
+  options: { limit: number; cursor?: string; kind?: PostKind },
 ): FeedResponse {
   const canonical = resolveMockTagSlug(slug);
   if (!canonical) return { items: [], nextCursor: null };
   return getMockFeedFromPosts(
-    mockPosts.filter((post) => post.tags.includes(canonical)),
+    mockPosts.filter((post) =>
+      post.tags.includes(canonical) && (!options.kind || post.postKind === options.kind)
+    ),
     options,
   );
 }

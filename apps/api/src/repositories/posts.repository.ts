@@ -160,12 +160,13 @@ async function buildFeedResponse(
 }
 
 export async function listRecentFeed(
-  query: { limit: number; cursor?: string },
+  query: { limit: number; cursor?: string; kind?: PostKind },
   viewerId?: string,
 ): Promise<FeedResponse> {
   const cursor = decodeCursor(query.cursor);
   const filters: SQL[] = [eq(posts.status, "published"), targetPublishedAndVisible(viewerId)];
 
+  if (query.kind) filters.push(eq(posts.postKind, query.kind));
   if (viewerId) filters.push(notBlocked(viewerId));
   if (cursor) {
     const cursorDate = new Date(cursor.createdAt);
@@ -187,7 +188,7 @@ export async function listRecentFeed(
 
 export async function listRecentFeedByTagId(
   tagId: string,
-  query: { limit: number; cursor?: string },
+  query: { limit: number; cursor?: string; kind?: PostKind },
   viewerId?: string,
 ): Promise<FeedResponse> {
   const cursor = decodeCursor(query.cursor);
@@ -197,6 +198,7 @@ export async function listRecentFeedByTagId(
     targetPublishedAndVisible(viewerId),
   ];
 
+  if (query.kind) filters.push(eq(posts.postKind, query.kind));
   if (viewerId) filters.push(notBlocked(viewerId));
   if (cursor) {
     const cursorDate = new Date(cursor.createdAt);
