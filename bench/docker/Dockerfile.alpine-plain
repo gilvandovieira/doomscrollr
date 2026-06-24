@@ -1,0 +1,8 @@
+# Plain Alpine (musl) — expected to FAIL: deno compile emits a glibc binary.
+FROM doomscrollr-api:compiled AS bin
+FROM alpine:3.20
+RUN apk add --no-cache ca-certificates
+COPY --from=bin /app/server /app/server
+ENV APP_ENV=production
+EXPOSE 8000
+CMD ["/app/server"]

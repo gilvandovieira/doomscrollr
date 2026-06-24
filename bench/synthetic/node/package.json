@@ -1,0 +1,14 @@
+{
+  "name": "rt-bench-node",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@clerk/backend": "^3.7.1",
+    "@hono/node-server": "^2.0.5",
+    "drizzle-orm": "^0.44.7",
+    "hono": "^4.12.25",
+    "pino": "^9.14.0",
+    "postgres": "^3.4.9",
+    "zod": "^3.25.76"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "compilerOptions": {
+    "module": "ESNext",
+    "target": "ESNext",
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": false,
+    "noEmit": true,
+    "strict": false,
+    "skipLibCheck": true,
+    "baseUrl": ".",
+    "paths": {
+      "@doomscrollr/config/*": ["./packages/config/src/*"],
+      "@doomscrollr/database/*": ["./packages/database/src/*"],
+      "@doomscrollr/shared/*": ["./packages/shared/src/*"]
+    }
+  }
+}

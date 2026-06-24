@@ -15,10 +15,22 @@ logger.info({
 const server = Deno.serve({ port: env.PORT }, app.fetch);
 
 async function shutdown(signal: "SIGTERM" | "SIGINT") {
-  if (shuttingDown) return;
+  if (shuttingDown) {
+    // A second signal while a drain is already in flight: exit now instead of
+    // ignoring it. Otherwise a hung drain leaves a zombie that only SIGKILL can
+    // clear, and concurrent watchers/agents pile those up until the box OOMs.
+    Deno.exit(130);
+  }
   shuttingDown = true;
 
   logger.info({ event: "api_shutdown_started", signal });
+
+  // Hard failsafe: never let a stuck server.shutdown()/closeDatabase() keep the
+  // process — and its memory — alive past the drain budget.
+  const forceExit = setTimeout(() => {
+    logger.warn({ event: "api_shutdown_forced", signal });
+    Deno.exit(1);
+  }, 12_000);
 
   try {
     await Promise.race([
@@ -41,6 +53,7 @@ async function shutdown(signal: "SIGTERM" | "SIGINT") {
     });
   }
 
+  clearTimeout(forceExit);
   logger.info({ event: "api_shutdown_complete", signal });
   Deno.exit(0);
 }

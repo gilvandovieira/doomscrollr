@@ -1,0 +1,8 @@
+# Alpine + gcompat (musl→glibc shim) — attempt to run the glibc binary on Alpine.
+FROM doomscrollr-api:compiled AS bin
+FROM alpine:3.20
+RUN apk add --no-cache ca-certificates gcompat libstdc++ libgcc
+COPY --from=bin /app/server /app/server
+ENV APP_ENV=production
+EXPOSE 8000
+CMD ["/app/server"]

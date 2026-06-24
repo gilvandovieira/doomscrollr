@@ -1,0 +1,21 @@
+{"level":30,"time":1782328843369,"pid":513386,"hostname":"F15","event":"api_starting","port":8093,"appEnv":"development"}
+Listening on http://0.0.0.0:8093/ (http://localhost:8093/)
+{"level":30,"time":1782328844178,"pid":513386,"hostname":"F15","event":"request_completed","requestId":"db272c8b-83a4-472c-923c-914d96ef57bb","method":"GET","path":"/health","status":200,"durationMs":1}
+{"level":30,"time":1782328844202,"pid":513386,"hostname":"F15","event":"request_completed","requestId":"ed866967-f1e2-494d-addb-1f8ca3ffd68c","method":"GET","path":"/health","status":200,"durationMs":0}
+{"level":30,"time":1782328844208,"pid":513386,"hostname":"F15","event":"request_completed","requestId":"3f70fe6b-ac7b-470b-8eae-dfba136ee8a5","method":"GET","path":"/health","status":200,"durationMs":0}
+{"level":30,"time":1782328844214,"pid":513386,"hostname":"F15","event":"request_completed","requestId":"f1cd0946-c154-46d3-a3ee-b499aca622c1","method":"GET","path":"/health","status":200,"durationMs":0}
+{"level":30,"time":1782328844220,"pid":513386,"hostname":"F15","event":"request_completed","requestId":"779a4612-9287-4b9e-88d9-49fc2350e63f","method":"GET","path":"/health","status":200,"durationMs":0}
+{"level":30,"time":1782328844226,"pid":513386,"hostname":"F15","event":"request_completed","requestId":"3daf3280-7a61-40db-8a61-2cb049df693b","method":"GET","path":"/health","status":200,"durationMs":0}
+{"level":30,"time":1782328844249,"pid":513386,"hostname":"F15","event":"request_completed","requestId":"1bb122d4-8368-4cf6-8b97-dc65872c0941","method":"GET","path":"/ready","status":200,"durationMs":17}
+{"level":30,"time":1782328844257,"pid":513386,"hostname":"F15","event":"request_completed","requestId":"f73c1727-b6a2-49cf-9495-562eca438c9c","method":"GET","path":"/api/feed","status":404,"durationMs":0}
+{"level":30,"time":1782328844262,"pid":513386,"hostname":"F15","event":"request_completed","requestId":"48f5c498-e256-44cd-96fc-c38b77b046c6","method":"GET","path":"/api/feed","status":404,"durationMs":0}
+{"level":30,"time":1782328844269,"pid":513386,"hostname":"F15","event":"request_completed","requestId":"3b6fa8cd-ef3f-42a5-aa1a-5870160475b9","method":"GET","path":"/api/feed","status":404,"durationMs":0}
+{"level":30,"time":1782328844275,"pid":513386,"hostname":"F15","event":"request_completed","requestId":"e82da742-8bcf-46b7-9eec-a46ccb8dfbd9","method":"GET","path":"/api/feed","status":404,"durationMs":0}
+{"level":30,"time":1782328844281,"pid":513386,"hostname":"F15","event":"request_completed","requestId":"5d57471a-73ef-4b31-9a0f-1b287c92e652","method":"GET","path":"/api/feed","status":404,"durationMs":0}
+{"level":30,"time":1782328844287,"pid":513386,"hostname":"F15","event":"request_completed","requestId":"cb487b5f-023f-42fc-8e1e-71e3e1f76903","method":"GET","path":"/api/feed","status":404,"durationMs":0}
+{"level":30,"time":1782328844292,"pid":513386,"hostname":"F15","event":"request_completed","requestId":"956846a2-7f28-440d-9460-15417c355715","method":"GET","path":"/api/feed","status":404,"durationMs":0}
+{"level":30,"time":1782328844299,"pid":513386,"hostname":"F15","event":"request_completed","requestId":"46c40ec5-091a-43e7-8309-95e98ca1bacc","method":"GET","path":"/api/feed","status":404,"durationMs":0}
+{"level":30,"time":1782328844304,"pid":513386,"hostname":"F15","event":"request_completed","requestId":"19e42775-b872-4552-9751-11468dc255e4","method":"GET","path":"/api/feed","status":404,"durationMs":0}
+{"level":30,"time":1782328844309,"pid":513386,"hostname":"F15","event":"request_completed","requestId":"bf256bbd-fc28-45a7-bdcc-390a6346e805","method":"GET","path":"/api/feed","status":404,"durationMs":0}
+{"level":30,"time":1782328844318,"pid":513386,"hostname":"F15","event":"api_shutdown_started","signal":"SIGTERM"}
+{"level":30,"time":1782328844321,"pid":513386,"hostname":"F15","event":"api_shutdown_complete","signal":"SIGTERM"}
