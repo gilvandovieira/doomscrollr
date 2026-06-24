@@ -61,9 +61,17 @@ export async function listNotificationsForUser(
         },
         postCode: posts.publicCode,
         postSlug: posts.slug,
-        postTitle: posts.title,
+        postTitle: sql<string | null>`CASE
+          WHEN ${posts.status} = 'published' THEN ${posts.title}
+          ELSE NULL
+        END`,
         commentCode: comments.publicCode,
-        commentBodyText: comments.bodyText,
+        commentBodyText: sql<string | null>`CASE
+          WHEN ${comments.status} = 'published'
+            AND (${posts.id} IS NULL OR ${posts.status} = 'published')
+          THEN ${comments.bodyText}
+          ELSE NULL
+        END`,
       })
       .from(notifications)
       .leftJoin(actor, eq(notifications.actorUserId, actor.id))

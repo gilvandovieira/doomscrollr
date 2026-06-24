@@ -1,25 +1,28 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "@tanstack/react-router";
 import { useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { useAuthToken, useIsSignedIn } from "../../app/account.ts";
 import { fetchComments, fetchPost, sendEvent } from "../../app/api.ts";
+import { getLocale } from "../../app/i18n.ts";
 import { PostMedia } from "../../components/PostMedia.tsx";
 import { ReactionBar } from "../../components/ReactionBar.tsx";
 import { ReportButton } from "../../components/ReportButton.tsx";
 import { ReshareControls } from "../../components/ReshareControls.tsx";
 import { ShareControls } from "../../components/ShareControls.tsx";
 import { TagLink } from "../../components/TagLink.tsx";
-import { postDisplayTitle } from "../../lib/post-display.ts";
+import { localizeFallbackTitle, postDisplayTitle } from "../../lib/post-display.ts";
 import { PostDetailSkeleton } from "./PostDetailSkeleton.tsx";
 import { CommentThread } from "./comments/CommentThread.tsx";
 
-const dateFormatter = new Intl.DateTimeFormat("en", {
+const DATE_OPTIONS: Intl.DateTimeFormatOptions = {
   month: "short",
   day: "numeric",
   year: "numeric",
-});
+};
 
 export function PostDetailPage() {
+  const { t } = useTranslation();
   const params = useParams({ strict: false }) as { postCode?: string };
   const postCode = params.postCode ?? "";
   const getToken = useAuthToken();
@@ -45,11 +48,11 @@ export function PostDetailPage() {
     return <PostDetailSkeleton />;
   }
   if (postQuery.isError || !postQuery.data) {
-    return <Shell message="This post is unavailable." />;
+    return <Shell message={t("post.unavailable")} />;
   }
 
   const post = postQuery.data;
-  const displayTitle = postDisplayTitle(post);
+  const displayTitle = localizeFallbackTitle(postDisplayTitle(post), t);
 
   return (
     <article className="space-y-4">
@@ -65,7 +68,7 @@ export function PostDetailPage() {
             </span>
           </Link>
           <span className="meta-label">
-            {dateFormatter.format(new Date(post.createdAt))}
+            {new Intl.DateTimeFormat(getLocale(), DATE_OPTIONS).format(new Date(post.createdAt))}
           </span>
         </div>
 

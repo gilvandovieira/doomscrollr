@@ -2,6 +2,7 @@ import type { Comment, ReplyComment } from "@doomscrollr/shared/types.ts";
 import { useQueryClient } from "@tanstack/react-query";
 import { MessageSquareText, Send } from "lucide-react";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useAuthToken, useIsSignedIn } from "../../../app/account.ts";
 import { createComment } from "../../../app/api.ts";
 import { ReactionBar } from "../../../components/ReactionBar.tsx";
@@ -14,20 +15,21 @@ type CommentThreadProps = {
 };
 
 export function CommentThread({ postCode, comments, isLoading }: CommentThreadProps) {
+  const { t } = useTranslation();
   return (
     <section className="hard-panel bg-paper">
       <div className="flex items-center gap-2 border-b border-ink/10 px-4 py-3">
         <MessageSquareText aria-hidden="true" size={20} />
-        <h2 className="text-lg font-bold tracking-[-0.01em]">Discussion</h2>
+        <h2 className="text-lg font-bold tracking-[-0.01em]">{t("post.discussion")}</h2>
       </div>
 
       <div className="space-y-4 p-4">
-        <CommentComposer postCode={postCode} placeholder="Add a comment" />
+        <CommentComposer postCode={postCode} placeholder={t("post.addComment")} />
 
         {isLoading
-          ? <p className="text-sm font-black">Loading comments…</p>
+          ? <p className="text-sm font-black">{t("post.loadingComments")}</p>
           : comments.length === 0
-          ? <p className="text-sm font-bold">No comments yet. Start the discussion.</p>
+          ? <p className="text-sm font-bold">{t("post.noComments")}</p>
           : comments.map((comment) => (
             <CommentItem key={comment.publicCode} postCode={postCode} comment={comment} />
           ))}
@@ -44,6 +46,7 @@ function CommentComposer(
     onDone?: () => void;
   },
 ) {
+  const { t } = useTranslation();
   const signedIn = useIsSignedIn();
   const getToken = useAuthToken();
   const queryClient = useQueryClient();
@@ -71,7 +74,7 @@ function CommentComposer(
     <form className="grid gap-2" onSubmit={submit}>
       <textarea
         className="field-control min-h-24 resize-y p-3 text-sm disabled:opacity-60"
-        placeholder={signedIn ? placeholder : "Sign in to comment"}
+        placeholder={signedIn ? placeholder : t("post.signInToComment")}
         value={value}
         onChange={(event) => setValue(event.target.value)}
         disabled={!signedIn || busy}
@@ -83,13 +86,14 @@ function CommentComposer(
         disabled={!signedIn || busy || !value.trim()}
       >
         <Send aria-hidden="true" size={17} />
-        {busy ? "Posting…" : "Comment"}
+        {busy ? t("post.posting") : t("post.comment")}
       </button>
     </form>
   );
 }
 
 function CommentItem({ postCode, comment }: { postCode: string; comment: Comment }) {
+  const { t } = useTranslation();
   const [replying, setReplying] = useState(false);
   const signedIn = useIsSignedIn();
 
@@ -116,7 +120,7 @@ function CommentItem({ postCode, comment }: { postCode: string; comment: Comment
             className="meta-label hover:underline"
             onClick={() => setReplying((value) => !value)}
           >
-            {replying ? "Cancel" : "Reply"}
+            {replying ? t("post.cancel") : t("post.reply")}
           </button>
         )}
       </div>
@@ -126,7 +130,7 @@ function CommentItem({ postCode, comment }: { postCode: string; comment: Comment
           <CommentComposer
             postCode={postCode}
             parentCommentCode={comment.publicCode}
-            placeholder="Write a reply"
+            placeholder={t("post.writeReply")}
             onDone={() => setReplying(false)}
           />
         </div>

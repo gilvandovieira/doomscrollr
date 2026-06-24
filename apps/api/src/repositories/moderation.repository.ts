@@ -175,8 +175,10 @@ export async function recordModerationAuditEvent(input: {
   });
 }
 
-export async function listModerationAuditEvents(limit = 30): Promise<ModerationAuditEvent[]> {
-  const rows = await requireDb()
+export async function listModerationAuditEvents(
+  limit: number | null = 30,
+): Promise<ModerationAuditEvent[]> {
+  const query = requireDb()
     .select({
       id: moderationAuditEvents.id,
       actor: {
@@ -194,8 +196,9 @@ export async function listModerationAuditEvents(limit = 30): Promise<ModerationA
     })
     .from(moderationAuditEvents)
     .innerJoin(users, eq(moderationAuditEvents.actorUserId, users.id))
-    .orderBy(desc(moderationAuditEvents.createdAt), desc(moderationAuditEvents.id))
-    .limit(Math.min(Math.max(limit, 1), 100));
+    .orderBy(desc(moderationAuditEvents.createdAt), desc(moderationAuditEvents.id));
+
+  const rows = limit === null ? await query : await query.limit(Math.min(Math.max(limit, 1), 100));
 
   return rows.map((row) => ({
     id: row.id,

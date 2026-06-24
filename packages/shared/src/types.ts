@@ -1,5 +1,6 @@
 import type { z } from "zod";
 import type {
+  CommentListQuerySchema,
   CommentSchema,
   CommentStatusSchema,
   CommentThreadResponseSchema,
@@ -85,6 +86,7 @@ export type CommentStatus = z.infer<typeof CommentStatusSchema>;
 export type Comment = z.infer<typeof CommentSchema>;
 export type ReplyComment = z.infer<typeof ReplyCommentSchema>;
 export type CommentThreadResponse = z.infer<typeof CommentThreadResponseSchema>;
+export type CommentListQuery = z.infer<typeof CommentListQuerySchema>;
 export type CreateCommentInput = z.infer<typeof CreateCommentSchema>;
 
 export type SetReactionInput = z.infer<typeof SetReactionSchema>;

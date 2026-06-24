@@ -2,17 +2,19 @@ import type { FeedPost } from "@doomscrollr/shared/types.ts";
 import { Link } from "@tanstack/react-router";
 import { MessageCircle } from "lucide-react";
 import type { CSSProperties } from "react";
+import { useTranslation } from "react-i18next";
 import { PostMedia } from "../../components/PostMedia.tsx";
 import { ReshareControls } from "../../components/ReshareControls.tsx";
 import { TagLink } from "../../components/TagLink.tsx";
-import { postDisplayTitle, postKindLabel } from "../../lib/post-display.ts";
+import { localizeFallbackTitle, postDisplayTitle, postKindLabel } from "../../lib/post-display.ts";
 
 // A post reads like something just shared into a chat: who shared it, the
 // content, then the reaction/discussion row.
 export function PostCard({ post, index = 0 }: { post: FeedPost; index?: number }) {
+  const { t } = useTranslation();
   const enterStyle = { "--stagger": `${Math.min(index, 7) * 32}ms` } as CSSProperties;
   const isReshare = post.postKind === "repost" || post.postKind === "quote";
-  const displayTitle = postDisplayTitle(post);
+  const displayTitle = localizeFallbackTitle(postDisplayTitle(post), t);
 
   return (
     <article
@@ -40,7 +42,7 @@ export function PostCard({ post, index = 0 }: { post: FeedPost; index?: number }
         >
           @{post.author.username}
         </Link>
-        <span className="post-card__kind">{postKindLabel(post.postKind)}</span>
+        <span className="post-card__kind">{postKindLabel(post.postKind, t)}</span>
       </div>
 
       <Link
@@ -49,7 +51,7 @@ export function PostCard({ post, index = 0 }: { post: FeedPost; index?: number }
         className={`post-card__link ${isReshare ? "post-card__link--reshare" : ""}`}
       >
         {isReshare
-          ? <h2 className="sr-only">{postKindLabel(post.postKind)} {displayTitle}</h2>
+          ? <h2 className="sr-only">{postKindLabel(post.postKind, t)} {displayTitle}</h2>
           : <h2 className="post-card__title">{displayTitle}</h2>}
         <PostMedia post={post} mode="card" />
       </Link>
@@ -62,12 +64,12 @@ export function PostCard({ post, index = 0 }: { post: FeedPost; index?: number }
         )}
 
         <div className="post-card__stats">
-          <span>{post.score} {post.score === 1 ? "point" : "points"}</span>
+          <span>{t("post.points", { count: post.score })}</span>
           <Link
             to="/p/$postCode/$slug"
             params={{ postCode: post.publicCode, slug: post.slug }}
             className="post-card__comments"
-            aria-label={`${post.commentCount} comments`}
+            aria-label={t("post.commentsAria", { count: post.commentCount })}
           >
             <MessageCircle aria-hidden="true" size={16} />
             {post.commentCount}

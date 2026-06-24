@@ -1,14 +1,15 @@
 import { getRouteApi } from "@tanstack/react-router";
-import { postKindLabel } from "../../lib/post-display.ts";
+import { useTranslation } from "react-i18next";
 import { InfinitePostList } from "./InfinitePostList.tsx";
 import { useRecentFeed } from "./useFeedQuery.ts";
 
 const route = getRouteApi("/");
 
 export function FeedPage() {
+  const { t } = useTranslation();
   const { kind } = route.useSearch();
   const feed = useRecentFeed(kind);
-  const heading = kind ? `${postKindLabel(kind)} posts` : "Fresh posts";
+  const heading = kind ? t(`feed.heading.${kind}`) : t("feed.fresh");
 
   if (feed.isPending) {
     return (
@@ -23,8 +24,8 @@ export function FeedPage() {
   if (feed.isError) {
     return (
       <div className="hard-panel p-5">
-        <p className="meta-label text-oxide">Feed unavailable</p>
-        <p className="mt-2 text-sm font-bold">Could not load the recent feed. Try again shortly.</p>
+        <p className="meta-label text-oxide">{t("feed.unavailable")}</p>
+        <p className="mt-2 text-sm font-bold">{t("feed.loadError")}</p>
       </div>
     );
   }
@@ -35,12 +36,10 @@ export function FeedPage() {
     return (
       <div className="hard-panel p-5">
         <h1 className="mobile-title">
-          {kind ? `No ${postKindLabel(kind).toLowerCase()} posts yet` : "No posts yet"}
+          {kind ? t("feed.emptyKindTitle") : t("feed.emptyTitle")}
         </h1>
         <p className="mt-2 text-sm font-bold">
-          {kind
-            ? "Nothing of this type so far. Try another filter."
-            : "Be the first to create one."}
+          {kind ? t("feed.emptyKindBody") : t("feed.emptyBody")}
         </p>
       </div>
     );

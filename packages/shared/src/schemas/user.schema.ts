@@ -40,3 +40,23 @@ export const UserProfileSchema = AuthorSchema.extend({
 export const SetUsernameSchema = z.object({
   username: UsernameSchema,
 });
+
+// Per-account display preferences. Kept private to the authenticated account
+// payload (never on the public profile). NULL = follow the device/browser.
+export const LocaleSchema = z.enum(["en", "pt-BR"]);
+export const ThemePreferenceSchema = z.enum(["auto", "light", "dark"]);
+
+export const AccountPreferencesSchema = z
+  .object({
+    locale: LocaleSchema.nullable(),
+    themePreference: ThemePreferenceSchema.nullable(),
+  })
+  .strict();
+
+// Update payload: only provided keys change; an explicit null clears a preference.
+export const UpdateAccountPreferencesSchema = z
+  .object({
+    locale: LocaleSchema.nullable().optional(),
+    themePreference: ThemePreferenceSchema.nullable().optional(),
+  })
+  .strict();

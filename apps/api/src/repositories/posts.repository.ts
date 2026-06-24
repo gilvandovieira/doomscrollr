@@ -60,6 +60,10 @@ function notBlocked(viewerId: string): SQL {
   )`;
 }
 
+function authorAccountVisible(): SQL {
+  return sql`${users.status} NOT IN ('suspended', 'banned')`;
+}
+
 function targetPublishedAndVisible(viewerId?: string): SQL {
   const blockFilter = viewerId
     ? sql`AND NOT EXISTS (
@@ -73,6 +77,11 @@ function targetPublishedAndVisible(viewerId?: string): SQL {
       SELECT 1 FROM posts target
       WHERE target.id = ${posts.repostOfPostId}
         AND target.status = 'published'
+        AND EXISTS (
+          SELECT 1 FROM users target_author
+          WHERE target_author.id = target.author_id
+            AND target_author.status NOT IN ('suspended', 'banned')
+        )
         ${blockFilter}
     )
   )`;
@@ -164,7 +173,11 @@ export async function listRecentFeed(
   viewerId?: string,
 ): Promise<FeedResponse> {
   const cursor = decodeCursor(query.cursor);
-  const filters: SQL[] = [eq(posts.status, "published"), targetPublishedAndVisible(viewerId)];
+  const filters: SQL[] = [
+    eq(posts.status, "published"),
+    authorAccountVisible(),
+    targetPublishedAndVisible(viewerId),
+  ];
 
   if (query.kind) filters.push(eq(posts.postKind, query.kind));
   if (viewerId) filters.push(notBlocked(viewerId));
@@ -194,6 +207,7 @@ export async function listRecentFeedByTagId(
   const cursor = decodeCursor(query.cursor);
   const filters: SQL[] = [
     eq(posts.status, "published"),
+    authorAccountVisible(),
     eq(postTags.tagId, tagId),
     targetPublishedAndVisible(viewerId),
   ];
@@ -226,6 +240,7 @@ export async function getPublishedPostByPublicCode(
   const filters: SQL[] = [
     eq(posts.publicCode, publicCode),
     eq(posts.status, "published"),
+    authorAccountVisible(),
     targetPublishedAndVisible(viewerId),
   ];
   if (viewerId) filters.push(notBlocked(viewerId));
@@ -241,7 +256,9 @@ export async function getPublishedPostByPublicCode(
 // status so the handler can distinguish "removed" (unavailable) from "missing".
 export async function getPostForPublicPageByCode(publicCode: string): Promise<FeedPost | null> {
   const rows = await basePostSelect()
-    .where(and(eq(posts.publicCode, publicCode), targetPublishedAndVisible()))
+    .where(
+      and(eq(posts.publicCode, publicCode), authorAccountVisible(), targetPublishedAndVisible()),
+    )
     .limit(1);
   const row = rows[0] as FeedPostRow | undefined;
   if (!row) return null;
@@ -264,6 +281,7 @@ export async function listPostsByUsername(
   const filters: SQL[] = [
     eq(posts.authorId, user.id),
     eq(posts.status, "published"),
+    authorAccountVisible(),
     targetPublishedAndVisible(viewerId),
   ];
   if (viewerId) filters.push(notBlocked(viewerId));
@@ -288,14 +306,25 @@ export async function getPostIdByPublicCode(publicCode: string): Promise<string 
   return rows[0]?.id ?? null;
 }
 
-// Used to resolve who owns a post (for block enforcement on comments/replies, §15).
-export async function getPostOwnerById(postId: string): Promise<string | null> {
+export async function getPublishedVisiblePostRefByPublicCode(
+  publicCode: string,
+  viewerId?: string,
+): Promise<{ id: string; authorId: string } | null> {
+  const filters: SQL[] = [
+    eq(posts.publicCode, publicCode),
+    eq(posts.status, "published"),
+    authorAccountVisible(),
+    targetPublishedAndVisible(viewerId),
+  ];
+  if (viewerId) filters.push(notBlocked(viewerId));
+
   const rows = await requireDb()
-    .select({ authorId: posts.authorId })
+    .select({ id: posts.id, authorId: posts.authorId })
     .from(posts)
-    .where(eq(posts.id, postId))
+    .innerJoin(users, eq(posts.authorId, users.id))
+    .where(and(...filters))
     .limit(1);
-  return rows[0]?.authorId ?? null;
+  return rows[0] ?? null;
 }
 
 export async function getReshareTargetByPublicCode(
@@ -309,7 +338,8 @@ export async function getReshareTargetByPublicCode(
       status: posts.status,
     })
     .from(posts)
-    .where(eq(posts.publicCode, publicCode))
+    .innerJoin(users, eq(posts.authorId, users.id))
+    .where(and(eq(posts.publicCode, publicCode), authorAccountVisible()))
     .limit(1);
   return rows[0] ?? null;
 }

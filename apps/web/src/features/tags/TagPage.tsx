@@ -1,10 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "@tanstack/react-router";
+import { useTranslation } from "react-i18next";
 import { fetchTag } from "../../app/api.ts";
 import { InfinitePostList } from "../feed/InfinitePostList.tsx";
 import { useTagFeed } from "../feed/useFeedQuery.ts";
 
 export function TagPage() {
+  const { t } = useTranslation();
   const params = useParams({ strict: false }) as { tagSlug?: string };
   const tagSlug = params.tagSlug ?? "";
 
@@ -29,8 +31,8 @@ export function TagPage() {
   if (tagQuery.isError || feed.isError || !tagQuery.data) {
     return (
       <div className="hard-panel p-5">
-        <p className="meta-label text-oxide">Tag unavailable</p>
-        <p className="mt-2 text-sm font-bold">That tag is disabled or does not exist.</p>
+        <p className="meta-label text-oxide">{t("tagPage.unavailable")}</p>
+        <p className="mt-2 text-sm font-bold">{t("tagPage.loadError")}</p>
       </div>
     );
   }
@@ -50,19 +52,19 @@ export function TagPage() {
             params={{ tagSlug: canonicalSlug }}
             className="tag-hero__alias"
           >
-            Showing canonical tag #{canonicalSlug}
+            {t("tagPage.canonical", { slug: canonicalSlug })}
           </Link>
         )}
         <p className="tag-hero__count">
-          {tag.postCount} {tag.postCount === 1 ? "post" : "posts"}
+          {t("tagPage.posts", { count: tag.postCount })}
         </p>
       </div>
 
       {posts.length === 0
         ? (
           <div className="hard-panel p-5">
-            <h2 className="mobile-title">No posts here yet</h2>
-            <p className="mt-2 text-sm font-bold">Create the first post for this tag.</p>
+            <h2 className="mobile-title">{t("tagPage.emptyTitle")}</h2>
+            <p className="mt-2 text-sm font-bold">{t("tagPage.emptyBody")}</p>
           </div>
         )
         : (

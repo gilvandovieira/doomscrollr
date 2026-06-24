@@ -28,7 +28,11 @@ import {
   TagDetailResponseSchema,
   TagListResponseSchema,
 } from "@doomscrollr/shared/schemas/tag.schema.ts";
-import { UserProfileSchema } from "@doomscrollr/shared/schemas/user.schema.ts";
+import {
+  AccountPreferencesSchema,
+  UpdateAccountPreferencesSchema,
+  UserProfileSchema,
+} from "@doomscrollr/shared/schemas/user.schema.ts";
 import type {
   AdminDomainBlock,
   AdminReportListQuery,
@@ -61,6 +65,14 @@ import { z } from "zod";
 import { type GetAuthToken } from "./auth.ts";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
+const ENABLE_MOCK_FALLBACK = import.meta.env.DEV ||
+  (import.meta.env.MODE !== "production" && import.meta.env.VITE_ENABLE_MOCK_FALLBACK === "1");
+
+class ApiError extends Error {
+  constructor(public status: number, public code: string, message: string) {
+    super(message);
+  }
+}
 
 // Public reads. Sends the auth token when one is available so the server can
 // personalize the response (viewerReaction, block filtering) for a signed-in
@@ -75,9 +87,19 @@ async function getJson<T>(
     const token = await getToken?.();
     if (token) headers.set("authorization", `Bearer ${token}`);
     const response = await fetch(`${API_BASE_URL}${path}`, { credentials: "include", headers });
-    if (!response.ok) throw new Error(`Request failed with ${response.status}`);
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({})) as {
+        error?: { code?: string; message?: string };
+      };
+      throw new ApiError(
+        response.status,
+        payload.error?.code ?? "ERROR",
+        payload.error?.message ?? `Request failed with ${response.status}`,
+      );
+    }
     return await response.json();
-  } catch {
+  } catch (error) {
+    if (!ENABLE_MOCK_FALLBACK) throw error;
     return fallback();
   }
 }
@@ -95,12 +117,6 @@ export async function fetchYouTubeTitle(url: string): Promise<string | null> {
     return typeof data.title === "string" && data.title.length > 0 ? data.title : null;
   } catch {
     return null;
-  }
-}
-
-class ApiError extends Error {
-  constructor(public status: number, public code: string, message: string) {
-    super(message);
   }
 }
 
@@ -346,13 +362,23 @@ export function markAllNotificationsRead(getToken: GetAuthToken): Promise<void> 
 const AccountSchema = z.object({
   needsUsername: z.boolean(),
   user: UserProfileSchema.nullable(),
+  preferences: AccountPreferencesSchema.nullish(),
 });
 export type Account = z.infer<typeof AccountSchema>;
+export type UpdatePreferencesInput = z.infer<typeof UpdateAccountPreferencesSchema>;
 
 export function fetchAccount(getToken: GetAuthToken): Promise<Account> {
   return authedFetch("/api/account/me", { method: "GET", getToken }).then((data) =>
     AccountSchema.parse(data)
   );
+}
+
+// Persist theme/language to the signed-in account so it follows across devices.
+export function saveAccountPreferences(
+  input: UpdatePreferencesInput,
+  getToken: GetAuthToken,
+): Promise<void> {
+  return authedFetch("/api/account/preferences", { body: input, getToken }).then(() => undefined);
 }
 
 export function setUsername(username: string, getToken: GetAuthToken): Promise<Account> {
@@ -439,10 +465,17 @@ export function createModerationNote(
   );
 }
 
-export function fetchModerationAudit(getToken: GetAuthToken): Promise<ModerationAuditEvent[]> {
-  return authedFetch("/api/admin/moderation/audit", { method: "GET", getToken }).then((data) =>
-    ModerationAuditListResponseSchema.parse(data).items
-  );
+export function fetchModerationAudit(
+  getToken: GetAuthToken,
+  options: { limit?: number | "all" } = {},
+): Promise<ModerationAuditEvent[]> {
+  const params = new URLSearchParams();
+  if (options.limit !== undefined) params.set("limit", String(options.limit));
+  const query = params.toString();
+  return authedFetch(`/api/admin/moderation/audit${query ? `?${query}` : ""}`, {
+    method: "GET",
+    getToken,
+  }).then((data) => ModerationAuditListResponseSchema.parse(data).items);
 }
 
 export function setUserModerationStatus(

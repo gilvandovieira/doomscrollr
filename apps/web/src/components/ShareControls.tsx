@@ -1,6 +1,7 @@
 import type { FeedPost } from "@doomscrollr/shared/types.ts";
 import { Check, Copy, Share2 } from "lucide-react";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { sendEvent } from "../app/api.ts";
 
 // Share the canonical (server-rendered, OG-previewable) URL — the centerpiece of
@@ -13,6 +14,7 @@ function canonicalUrl(post: FeedPost): string {
 }
 
 export function ShareControls({ post }: { post: FeedPost }) {
+  const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
   const url = canonicalUrl(post);
   const shareData: ShareData = { title: post.title, text: post.title, url };
@@ -48,7 +50,7 @@ export function ShareControls({ post }: { post: FeedPost }) {
     <div className="share-controls">
       <button type="button" onClick={shareWhatsApp} className="tool-button share-whatsapp">
         <Share2 aria-hidden="true" size={17} />
-        WhatsApp
+        {t("post.whatsapp")}
       </button>
       <button
         type="button"
@@ -58,10 +60,15 @@ export function ShareControls({ post }: { post: FeedPost }) {
         }`}
       >
         {copied ? <Check aria-hidden="true" size={17} /> : <Copy aria-hidden="true" size={17} />}
-        {copied ? "Copied" : "Copy link"}
+        {copied ? t("post.copied") : t("post.copyLink")}
       </button>
       {canUseNativeShare && (
-        <button type="button" onClick={nativeShare} className="icon-button" aria-label="Share">
+        <button
+          type="button"
+          onClick={nativeShare}
+          className="icon-button"
+          aria-label={t("post.share")}
+        >
           <Share2 aria-hidden="true" size={18} />
         </button>
       )}

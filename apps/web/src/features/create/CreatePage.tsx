@@ -3,19 +3,27 @@ import { MAX_TAGS_PER_POST } from "@doomscrollr/shared/constants.ts";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useAuthToken, useIsSignedIn } from "../../app/account.ts";
 import { ApiError, createPost, fetchTags, fetchYouTubeTitle } from "../../app/api.ts";
 
 type CreatablePostKind = Extract<PostKind, "text" | "external_image" | "youtube">;
 
-const TABS: { kind: CreatablePostKind; label: string }[] = [
-  { kind: "text", label: "Text" },
-  { kind: "external_image", label: "Image link" },
-  { kind: "youtube", label: "YouTube" },
+const TABS: { kind: CreatablePostKind; labelKey: string }[] = [
+  { kind: "text", labelKey: "create.tabs.text" },
+  { kind: "external_image", labelKey: "create.tabs.image" },
+  { kind: "youtube", labelKey: "create.tabs.youtube" },
 ];
 const URL_PATTERN = /https?:\/\/\S+/i;
 const IMAGE_PATH_PATTERN = /\.(avif|gif|jpe?g|png|webp)$/i;
-const YOUTUBE_HOST_PATTERN = /(^|\.)youtube\.com$|(^|\.)youtu\.be$/i;
+const YOUTUBE_HOSTS = new Set([
+  "youtube.com",
+  "www.youtube.com",
+  "m.youtube.com",
+  "music.youtube.com",
+  "youtu.be",
+  "www.youtu.be",
+]);
 
 type ShareTargetDraft = {
   kind: CreatablePostKind;
@@ -26,6 +34,7 @@ type ShareTargetDraft = {
 };
 
 export function CreatePage() {
+  const { t } = useTranslation();
   const signedIn = useIsSignedIn();
   const getToken = useAuthToken();
   const navigate = useNavigate();
@@ -76,8 +85,8 @@ export function CreatePage() {
   if (!signedIn) {
     return (
       <div className="hard-panel p-5">
-        <h1 className="mobile-title">Sign in to post</h1>
-        <p className="mt-2 text-sm font-bold">Posting needs an account. Reading stays open.</p>
+        <h1 className="mobile-title">{t("create.signInTitle")}</h1>
+        <p className="mt-2 text-sm font-bold">{t("create.signInBody")}</p>
       </div>
     );
   }
@@ -109,7 +118,7 @@ export function CreatePage() {
         params: { postCode: post.publicCode, slug: post.slug },
       });
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not create the post.");
+      setError(err instanceof ApiError ? err.message : t("create.error"));
     } finally {
       setBusy(false);
     }
@@ -118,7 +127,7 @@ export function CreatePage() {
   return (
     <section className="space-y-4">
       <div className="px-1">
-        <h1 className="mobile-title">Create a post</h1>
+        <h1 className="mobile-title">{t("create.title")}</h1>
       </div>
 
       <div className="grid grid-cols-3 gap-2">
@@ -131,13 +140,17 @@ export function CreatePage() {
             data-kind={tab.kind}
             className="tool-button create-kind-tab px-2"
           >
-            {tab.label}
+            {t(tab.labelKey)}
           </button>
         ))}
       </div>
 
       <form onSubmit={submit} className="hard-panel space-y-3 p-4">
-        <Field label={kind === "text" || kind === "youtube" ? "Title (optional)" : "Title"}>
+        <Field
+          label={kind === "text" || kind === "youtube"
+            ? t("create.titleOptional")
+            : t("create.titleLabel")}
+        >
           <div className="title-field">
             <input
               value={title}
@@ -146,8 +159,8 @@ export function CreatePage() {
                 titleTouched.current = event.target.value.trim().length > 0;
               }}
               placeholder={kind === "text"
-                ? "Optional — we'll use your first sentence"
-                : "Say something"}
+                ? t("create.titlePlaceholderText")
+                : t("create.titlePlaceholder")}
               className="field-control min-h-11 px-3 text-sm"
               maxLength={180}
               aria-busy={titleLoading}
@@ -162,17 +175,17 @@ export function CreatePage() {
 
         <div key={kind} className="create-kind-fields">
           {kind === "text" && (
-            <Field label="Body">
+            <Field label={t("create.body")}>
               <textarea
                 value={bodyText}
                 onChange={(event) => setBodyText(event.target.value)}
                 className="field-control min-h-32 resize-y p-3 text-sm"
-                placeholder="Write your post"
+                placeholder={t("create.bodyPlaceholder")}
               />
             </Field>
           )}
           {kind === "external_image" && (
-            <Field label="Image URL">
+            <Field label={t("create.imageUrl")}>
               <input
                 value={imageUrl}
                 onChange={(event) => setImageUrl(event.target.value)}
@@ -183,7 +196,7 @@ export function CreatePage() {
           )}
           {kind === "youtube" && (
             <>
-              <Field label="YouTube URL">
+              <Field label={t("create.youtubeUrl")}>
                 <input
                   value={youtubeUrl}
                   onChange={(event) => setYoutubeUrl(event.target.value)}
@@ -193,9 +206,7 @@ export function CreatePage() {
               </Field>
               {/* Kept outside the label so it doesn't pollute the input's accessible name. */}
               <p className="meta-label mt-2" role="status" aria-live="polite">
-                {titleLoading
-                  ? "Fetching the video title…"
-                  : "Paste a link — the title fills in from the video. Edit it above if you like."}
+                {titleLoading ? t("create.ytFetching") : t("create.ytHint")}
               </p>
             </>
           )}
@@ -203,7 +214,7 @@ export function CreatePage() {
 
         <div className="space-y-2">
           <div className="flex items-center justify-between gap-3">
-            <span className="meta-label">Tags</span>
+            <span className="meta-label">{t("create.tags")}</span>
             <span className="meta-label">
               {selectedTags.length}/{MAX_TAGS_PER_POST}
             </span>
@@ -225,14 +236,14 @@ export function CreatePage() {
                 </button>
               );
             })}
-            {tagsQuery.isPending && <span className="meta-label">Loading tags...</span>}
+            {tagsQuery.isPending && <span className="meta-label">{t("create.loadingTags")}</span>}
           </div>
         </div>
 
         {error && <p className="meta-label text-oxide">{error}</p>}
 
         <button type="submit" className="tool-button w-full bg-signal text-pitch" disabled={busy}>
-          {busy ? "Publishing…" : "Publish"}
+          {busy ? t("create.publishing") : t("create.publish")}
         </button>
       </form>
     </section>
@@ -308,7 +319,9 @@ function textWithoutUrl(value: string): string {
 
 function isYouTubeUrl(value: string): boolean {
   try {
-    return YOUTUBE_HOST_PATTERN.test(new URL(value).hostname);
+    const url = new URL(value);
+    return (url.protocol === "https:" || url.protocol === "http:") &&
+      YOUTUBE_HOSTS.has(url.hostname.toLowerCase());
   } catch {
     return false;
   }

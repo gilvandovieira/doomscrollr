@@ -6,9 +6,9 @@ import {
 import type { FeedPost } from "@doomscrollr/shared/types.ts";
 
 // Generic branded preview used for text posts, removed/unavailable posts, and as a
-// fallback when an external image can't be trusted (spec §11.3, §11.4).
-// Replace with a self-hosted branded asset before public launch.
-export const DEFAULT_OG_IMAGE = "https://placehold.co/1200x630/0b0b0b/f5f5f5.png?text=Doomscrollr";
+// fallback when an external image can't be trusted (spec §11.3, §11.4). Served
+// by the API so OG pages never depend on an external placeholder host.
+export const DEFAULT_OG_IMAGE_PATH = "/og-default.svg";
 
 const GENERIC_DESCRIPTION = `Join the discussion on ${PRODUCT_CODENAME}`;
 
@@ -48,6 +48,10 @@ function youtubeThumbnail(videoId: string): string {
   return `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
 }
 
+function defaultOgImageUrl(baseUrl: string): string {
+  return new URL(DEFAULT_OG_IMAGE_PATH, baseUrl).toString();
+}
+
 export type OpenGraph = {
   title: string;
   description: string;
@@ -63,7 +67,7 @@ export function buildPostOpenGraph(
   canonicalUrl: string,
   ogImage?: string,
 ): OpenGraph {
-  let image = DEFAULT_OG_IMAGE;
+  let image = defaultOgImageUrl(canonicalUrl);
   if (post.postKind === "youtube" && post.youtubeVideoId) {
     image = youtubeThumbnail(post.youtubeVideoId);
   } else if (post.postKind === "external_image" && ogImage) {
@@ -187,13 +191,13 @@ export function renderPostShellHtml(options: {
 </html>`;
 }
 
-export function renderUnavailablePostHtml(appUrl: string): string {
+export function renderUnavailablePostHtml(appUrl: string, imageBaseUrl = appUrl): string {
   const og: OpenGraph = {
     title: `${PRODUCT_CODENAME}`,
     description: "This post is unavailable.",
     url: appUrl,
     type: "website",
-    image: DEFAULT_OG_IMAGE,
+    image: defaultOgImageUrl(imageBaseUrl),
   };
   return `<!doctype html>
 <html lang="en">
@@ -214,4 +218,14 @@ export function renderUnavailablePostHtml(appUrl: string): string {
     </main>
   </body>
 </html>`;
+}
+
+export function renderDefaultOgImageSvg(): string {
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-label="${PRODUCT_CODENAME}">
+  <rect width="1200" height="630" fill="#0b0b0b"/>
+  <rect x="56" y="56" width="1088" height="518" rx="28" fill="#f5f5f5"/>
+  <rect x="96" y="96" width="1008" height="438" rx="18" fill="#161616"/>
+  <text x="116" y="302" fill="#f5f5f5" font-family="Inter, system-ui, sans-serif" font-size="96" font-weight="900">${PRODUCT_CODENAME}</text>
+  <text x="122" y="378" fill="#f5f5f5" font-family="Inter, system-ui, sans-serif" font-size="34" font-weight="700">Share the post. Keep the context.</text>
+</svg>`;
 }

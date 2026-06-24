@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { Quote, Repeat2, Send } from "lucide-react";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useAccount, useAuthToken, useIsSignedIn } from "../app/account.ts";
 import { ApiError, createQuote, createRepost } from "../app/api.ts";
 
@@ -12,6 +13,7 @@ type ReshareControlsProps = {
 };
 
 export function ReshareControls({ post, variant = "detail" }: ReshareControlsProps) {
+  const { t } = useTranslation();
   const signedIn = useIsSignedIn();
   const account = useAccount();
   const getToken = useAuthToken();
@@ -32,7 +34,7 @@ export function ReshareControls({ post, variant = "detail" }: ReshareControlsPro
       });
     },
     onError: (err) => {
-      setError(err instanceof ApiError ? err.message : "Could not repost this.");
+      setError(err instanceof ApiError ? err.message : t("reshare.repostError"));
     },
   });
 
@@ -49,7 +51,7 @@ export function ReshareControls({ post, variant = "detail" }: ReshareControlsPro
       });
     },
     onError: (err) => {
-      setError(err instanceof ApiError ? err.message : "Could not quote this.");
+      setError(err instanceof ApiError ? err.message : t("reshare.quoteError"));
     },
   });
 
@@ -73,10 +75,10 @@ export function ReshareControls({ post, variant = "detail" }: ReshareControlsPro
           className="tool-button reshare-controls__button"
           onClick={() => repostMutation.mutate()}
           disabled={!signedIn || busy}
-          title={signedIn ? "Repost" : "Sign in to repost"}
+          title={signedIn ? t("reshare.repost") : t("reshare.signInRepost")}
         >
           <Repeat2 aria-hidden="true" size={16} />
-          <span>Repost</span>
+          <span className="reshare-controls__label">{t("reshare.repost")}</span>
           <span className="reshare-controls__count">{post.repostCount}</span>
         </button>
         <button
@@ -88,10 +90,10 @@ export function ReshareControls({ post, variant = "detail" }: ReshareControlsPro
           }}
           disabled={!signedIn || busy}
           aria-expanded={quoteOpen}
-          title={signedIn ? "Quote" : "Sign in to quote"}
+          title={signedIn ? t("reshare.quote") : t("reshare.signInQuote")}
         >
           <Quote aria-hidden="true" size={16} />
-          <span>Quote</span>
+          <span className="reshare-controls__label">{t("reshare.quote")}</span>
           <span className="reshare-controls__count">{post.quoteCount}</span>
         </button>
       </div>
@@ -102,7 +104,7 @@ export function ReshareControls({ post, variant = "detail" }: ReshareControlsPro
             value={quoteText}
             onChange={(event) => setQuoteText(event.target.value)}
             className="field-control quote-compose__input"
-            placeholder="Add your take"
+            placeholder={t("reshare.addTake")}
             maxLength={2000}
             rows={variant === "compact" ? 2 : 3}
           />
@@ -110,7 +112,7 @@ export function ReshareControls({ post, variant = "detail" }: ReshareControlsPro
             {error && <p className="quote-compose__error">{error}</p>}
             <button type="submit" className="tool-button bg-signal" disabled={!canQuote}>
               <Send aria-hidden="true" size={16} />
-              Quote
+              {t("reshare.quote")}
             </button>
           </div>
         </form>

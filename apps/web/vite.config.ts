@@ -28,6 +28,7 @@ export default defineConfig(({ mode }) => {
       strictPort: false,
     },
     resolve: {
+      dedupe: ["react", "react-dom"],
       alias: {
         "@doomscrollr/shared": fileURLToPath(
           new URL("../../packages/shared/src", import.meta.url),

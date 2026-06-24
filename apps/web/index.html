@@ -23,7 +23,7 @@
       rel="stylesheet"
       href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&display=swap"
       media="print"
-      onload="this.media='all'"
+      onload='this.media = "all"'
     />
     <noscript>
       <link
@@ -61,7 +61,8 @@
         color: var(--boot-fg);
       }
       body {
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial,
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial,
           sans-serif;
       }
       .app-boot {
@@ -133,7 +134,17 @@
       <!-- Instant app shell; React replaces it on mount. -->
       <div class="app-boot">
         <span class="app-boot__mark">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <svg
+            width="24"
+            height="24"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.75"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
             <path d="m6 9 6 6 6-6" />
             <path d="m6 4 6 6 6-6" />
           </svg>

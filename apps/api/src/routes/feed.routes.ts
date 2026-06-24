@@ -1,7 +1,7 @@
 import { getMockFeed } from "@doomscrollr/shared/mock-data.ts";
 import { RecentFeedQuerySchema } from "@doomscrollr/shared/schemas/post.schema.ts";
 import { Hono } from "hono";
-import { hasDatabase } from "../db/client.ts";
+import { allowMockFallback, hasDatabase } from "../db/client.ts";
 import { parseOrThrow } from "../lib/validation.ts";
 import { listRecentFeed } from "../repositories/posts.repository.ts";
 import { getOptionalViewerId } from "../middleware/auth.ts";
@@ -12,7 +12,7 @@ export const feedRoutes = new Hono();
 feedRoutes.get("/recent", async (c) => {
   const query = parseOrThrow(RecentFeedQuerySchema, c.req.query());
 
-  if (!hasDatabase()) {
+  if (!hasDatabase() && allowMockFallback()) {
     return c.json(getMockFeed(query));
   }
 

@@ -8,8 +8,11 @@ if (!databaseUrl) {
 
 const sql = postgres(databaseUrl, { max: 1 });
 const migrationsDir = new URL("./migrations/", import.meta.url);
+const MIGRATION_LOCK_KEY = "doomscrollr:schema_migrations";
 
 try {
+  await sql`SELECT pg_advisory_lock(hashtextextended(${MIGRATION_LOCK_KEY}, 0))`;
+
   await sql`
     CREATE TABLE IF NOT EXISTS schema_migrations (
       name text PRIMARY KEY,
@@ -41,5 +44,6 @@ try {
     console.log(`Applied ${name}`);
   }
 } finally {
+  await sql`SELECT pg_advisory_unlock(hashtextextended(${MIGRATION_LOCK_KEY}, 0))`.catch(() => []);
   await sql.end();
 }

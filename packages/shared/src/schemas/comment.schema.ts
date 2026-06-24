@@ -1,5 +1,13 @@
 import { z } from "zod";
-import { COMMENT_MAX_LENGTH, COMMENT_MIN_LENGTH } from "../constants.ts";
+import {
+  COMMENT_MAX_LENGTH,
+  COMMENT_MIN_LENGTH,
+  DEFAULT_COMMENT_LIMIT,
+  DEFAULT_REPLIES_PER_COMMENT,
+  MAX_COMMENT_LIMIT,
+  MAX_REPLIES_PER_COMMENT,
+} from "../constants.ts";
+import { RecentCursorSchema } from "./pagination.schema.ts";
 import { ReactionValueSchema } from "./post.schema.ts";
 import { AuthorSchema } from "./user.schema.ts";
 
@@ -10,6 +18,15 @@ export const CommentStatusSchema = z.enum(["published", "removed"]);
 export const CreateCommentSchema = z.object({
   bodyText: z.string().trim().min(COMMENT_MIN_LENGTH).max(COMMENT_MAX_LENGTH),
   parentCommentCode: z.string().optional(),
+});
+
+export const CommentCursorSchema = RecentCursorSchema;
+
+export const CommentListQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(MAX_COMMENT_LIMIT).default(DEFAULT_COMMENT_LIMIT),
+  cursor: z.string().optional(),
+  repliesLimit: z.coerce.number().int().min(0).max(MAX_REPLIES_PER_COMMENT)
+    .default(DEFAULT_REPLIES_PER_COMMENT),
 });
 
 const BaseCommentSchema = z.object({
@@ -36,5 +53,6 @@ export const CommentSchema = BaseCommentSchema.extend({
 export const CommentThreadResponseSchema = z
   .object({
     items: z.array(CommentSchema),
+    nextCursor: z.string().nullable().default(null),
   })
   .strict();

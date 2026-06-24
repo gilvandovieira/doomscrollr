@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { badRequest } from "../lib/errors.ts";
 import { ensureAnonSession } from "../lib/anon-session.ts";
-import { enforceRateLimit, RATE_LIMITS } from "../lib/rate-limit.ts";
+import { enforceRateLimit, publicRateLimitKey, RATE_LIMITS } from "../lib/rate-limit.ts";
 import {
   extractYouTubeId,
   fetchYouTubeTitle,
@@ -21,7 +21,10 @@ youtubeRoutes.get("/oembed", async (c) => {
 
   // Light per-session budget: this hits an external service.
   const sessionId = ensureAnonSession(c);
-  await enforceRateLimit(`yt-oembed:${sessionId}`, RATE_LIMITS.youtubeLookup);
+  await enforceRateLimit(
+    await publicRateLimitKey(c, "yt-oembed", sessionId),
+    RATE_LIMITS.youtubeLookup,
+  );
 
   const title = await fetchYouTubeTitle(url);
   return c.json({ videoId, isShort: isYouTubeShort(url), title });

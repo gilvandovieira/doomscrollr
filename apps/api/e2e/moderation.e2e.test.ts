@@ -19,6 +19,7 @@ import {
   assertEquals,
   assertIncludes,
   assertStatus,
+  COMMENTS,
   e2eTest,
   POSTS,
   USERS,
@@ -173,6 +174,32 @@ e2eTest("admin can remove and restore a post; removed posts stay share-safe", as
   const apiRead = await api(`/api/posts/${code}`);
   assertStatus(apiRead, 404);
 
+  const removedComments = await api(`/api/posts/${code}/comments`);
+  assertStatus(removedComments, 404);
+
+  const lateComment = await api(`/api/posts/${code}/comments`, {
+    asUser: USERS.ren.clerkId,
+    body: { bodyText: "This should not attach to a removed post." },
+  });
+  assertStatus(lateComment, 404);
+
+  const lateReaction = await api(`/api/posts/${code}/reactions`, {
+    asUser: USERS.ana.clerkId,
+    body: { value: 1 },
+  });
+  assertStatus(lateReaction, 404);
+
+  const lateRepost = await api(`/api/posts/${code}/reposts`, {
+    method: "POST",
+    asUser: USERS.ren.clerkId,
+  });
+  assertStatus(lateRepost, 404);
+
+  const lateEvent = await api(`/api/events`, {
+    body: { eventType: "post_opened", postCode: code },
+  });
+  assertStatus(lateEvent, 404);
+
   // The canonical share page must NOT leak the original title/image (spec §11.4):
   // it returns 200 with the generic "unavailable" shell.
   const sharePage = await api(`/p/${code}`);
@@ -212,6 +239,27 @@ e2eTest("removing a post that does not exist returns 404", async () => {
     body: {},
   });
   assertStatus(res, 404);
+});
+
+e2eTest("comment reactions are blocked when the parent post is removed", async () => {
+  const code = POSTS.fridayText.code;
+  const removed = await api<{ ok: boolean }>(`/api/admin/posts/${code}/remove`, {
+    asUser: USERS.admin.clerkId,
+    body: { reason: "E2E comment reaction parent removal" },
+  });
+  assertStatus(removed, 200);
+
+  const reaction = await api(`/api/comments/${COMMENTS.topLevel}/reactions`, {
+    asUser: USERS.ana.clerkId,
+    body: { value: 1 },
+  });
+  assertStatus(reaction, 404);
+
+  const restored = await api<{ ok: boolean }>(`/api/admin/posts/${code}/restore`, {
+    method: "POST",
+    asUser: USERS.admin.clerkId,
+  });
+  assertStatus(restored, 200);
 });
 
 e2eTest("non-admins cannot reach the admin surface", async () => {

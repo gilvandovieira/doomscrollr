@@ -5,7 +5,8 @@
   },
   "tasks": {
     "dev": "deno run --env-file=../../.env.local --watch --allow-net --allow-env --allow-sys=hostname src/main.ts",
-    "start": "deno run --env-file=../../.env.local --allow-net --allow-env --allow-sys=hostname src/main.ts",
+    "start": "deno run --allow-net --allow-env --allow-sys=hostname src/main.ts",
+    "start:local": "deno run --env-file=../../.env.local --allow-net --allow-env --allow-sys=hostname src/main.ts",
     "check": "deno check src/main.ts",
     "test": "deno test --allow-env src"
   },

@@ -43,6 +43,10 @@ export const POST_BODY_MAX_LENGTH = 10_000;
 // Comment body (spec §8.3).
 export const COMMENT_MIN_LENGTH = 1;
 export const COMMENT_MAX_LENGTH = 2000;
+export const DEFAULT_COMMENT_LIMIT = 20;
+export const MAX_COMMENT_LIMIT = 50;
+export const DEFAULT_REPLIES_PER_COMMENT = 3;
+export const MAX_REPLIES_PER_COMMENT = 10;
 
 // Mentions (v2). Unique valid @username mentions are capped per comment so a
 // single comment cannot fan out notifications to a large group.

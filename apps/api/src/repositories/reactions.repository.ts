@@ -28,13 +28,16 @@ export async function setPostReaction(
   value: 1 | -1 | 0,
 ): Promise<ReactionResult> {
   return await requireDb().transaction(async (tx) => {
+    await tx.execute(
+      sql`SELECT pg_advisory_xact_lock(hashtextextended(${`post:${userId}:${postId}`}, 0))`,
+    );
     const existingRows = await tx
       .select({ value: postReactions.value })
       .from(postReactions)
       .where(and(eq(postReactions.userId, userId), eq(postReactions.postId, postId)))
       .limit(1);
     const existing = existingRows[0]?.value ?? null;
-    const delta = transition(existing, value);
+    let delta = transition(existing, value);
 
     if (value === 0) {
       if (existing !== null) {
@@ -43,7 +46,26 @@ export async function setPostReaction(
         );
       }
     } else if (existing === null) {
-      await tx.insert(postReactions).values({ userId, postId, value });
+      const inserted = await tx.insert(postReactions)
+        .values({ userId, postId, value })
+        .onConflictDoNothing({
+          target: [postReactions.userId, postReactions.postId],
+        })
+        .returning({ value: postReactions.value });
+      if (inserted.length === 0) {
+        const currentRows = await tx
+          .select({ value: postReactions.value })
+          .from(postReactions)
+          .where(and(eq(postReactions.userId, userId), eq(postReactions.postId, postId)))
+          .limit(1);
+        const current = currentRows[0]?.value ?? null;
+        delta = transition(current, value);
+        if (current !== null && current !== value) {
+          await tx.update(postReactions).set({ value, updatedAt: new Date() }).where(
+            and(eq(postReactions.userId, userId), eq(postReactions.postId, postId)),
+          );
+        }
+      }
     } else if (existing !== value) {
       await tx.update(postReactions).set({ value, updatedAt: new Date() }).where(
         and(eq(postReactions.userId, userId), eq(postReactions.postId, postId)),
@@ -81,13 +103,16 @@ export async function setCommentReaction(
   value: 1 | -1 | 0,
 ): Promise<ReactionResult> {
   return await requireDb().transaction(async (tx) => {
+    await tx.execute(
+      sql`SELECT pg_advisory_xact_lock(hashtextextended(${`comment:${userId}:${commentId}`}, 0))`,
+    );
     const existingRows = await tx
       .select({ value: commentReactions.value })
       .from(commentReactions)
       .where(and(eq(commentReactions.userId, userId), eq(commentReactions.commentId, commentId)))
       .limit(1);
     const existing = existingRows[0]?.value ?? null;
-    const delta = transition(existing, value);
+    let delta = transition(existing, value);
 
     if (value === 0) {
       if (existing !== null) {
@@ -96,7 +121,28 @@ export async function setCommentReaction(
         );
       }
     } else if (existing === null) {
-      await tx.insert(commentReactions).values({ userId, commentId, value });
+      const inserted = await tx.insert(commentReactions)
+        .values({ userId, commentId, value })
+        .onConflictDoNothing({
+          target: [commentReactions.userId, commentReactions.commentId],
+        })
+        .returning({ value: commentReactions.value });
+      if (inserted.length === 0) {
+        const currentRows = await tx
+          .select({ value: commentReactions.value })
+          .from(commentReactions)
+          .where(
+            and(eq(commentReactions.userId, userId), eq(commentReactions.commentId, commentId)),
+          )
+          .limit(1);
+        const current = currentRows[0]?.value ?? null;
+        delta = transition(current, value);
+        if (current !== null && current !== value) {
+          await tx.update(commentReactions).set({ value, updatedAt: new Date() }).where(
+            and(eq(commentReactions.userId, userId), eq(commentReactions.commentId, commentId)),
+          );
+        }
+      }
     } else if (existing !== value) {
       await tx.update(commentReactions).set({ value, updatedAt: new Date() }).where(
         and(eq(commentReactions.userId, userId), eq(commentReactions.commentId, commentId)),

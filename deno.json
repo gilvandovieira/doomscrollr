@@ -12,7 +12,7 @@
     "indentWidth": 2,
     "semiColons": true,
     "singleQuote": false,
-    "exclude": ["doomscrollr_spec.md"]
+    "exclude": ["doomscrollr_spec.md", "specs/"]
   },
   "lint": {
     "rules": {
@@ -22,15 +22,20 @@
   "tasks": {
     "dev:api": "deno task --cwd apps/api dev",
     "dev:web": "deno task --cwd apps/web dev",
+    "start:api": "deno task --cwd apps/api start",
+    "start:api:prod": "APP_ENV=production deno task --cwd apps/api start",
     "build:web": "deno task --cwd apps/web build",
     "db:migrate": "deno task --filter @doomscrollr/database migrate",
     "db:seed": "deno task --filter @doomscrollr/database seed",
     "db:unseed": "deno task --filter @doomscrollr/database unseed",
     "report:funnel": "deno task --filter @doomscrollr/database report:funnel",
+    "fmt:check": "deno fmt --check",
+    "lint": "deno lint",
     "check": "deno task --filter @doomscrollr/api check && deno task --filter @doomscrollr/web check && deno task --filter @doomscrollr/config check && deno task --filter @doomscrollr/database check && deno task --filter @doomscrollr/shared check",
     "check:e2e": "deno check apps/api/e2e/*.e2e.test.ts",
-    "test": "deno test --allow-env --permit-no-files --ignore=apps/api/e2e packages apps",
-    "test:e2e": "deno test -A apps/api/e2e/"
+    "test": "deno test --allow-env --allow-read=apps/web/src/styles.css --permit-no-files --ignore=apps/api/e2e packages apps",
+    "test:e2e": "deno test -A apps/api/e2e/",
+    "ci": "deno task fmt:check && deno task lint && deno cache --frozen --lock=deno.lock apps/api/src/main.ts apps/web/src/main.tsx packages/database/src/migrate.ts && deno task check && deno task test && deno task build:web"
   },
   "imports": {
     "@doomscrollr/config/": "./packages/config/src/",

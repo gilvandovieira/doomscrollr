@@ -5,14 +5,17 @@ import {
   TITLE_MIN_LENGTH,
 } from "@doomscrollr/shared/constants.ts";
 import { getMockCommentsForPost, getMockPostByCode } from "@doomscrollr/shared/mock-data.ts";
-import { CreateCommentSchema } from "@doomscrollr/shared/schemas/comment.schema.ts";
+import {
+  CommentListQuerySchema,
+  CreateCommentSchema,
+} from "@doomscrollr/shared/schemas/comment.schema.ts";
 import {
   CreatePostSchema,
   CreateQuotePostSchema,
 } from "@doomscrollr/shared/schemas/post.schema.ts";
 import { SetReactionSchema } from "@doomscrollr/shared/schemas/reaction.schema.ts";
 import { Hono } from "hono";
-import { hasDatabase } from "../db/client.ts";
+import { allowMockFallback, hasDatabase } from "../db/client.ts";
 import { badRequest, conflict, forbidden, notFound } from "../lib/errors.ts";
 import { buildCanonicalPostUrl } from "../lib/og.ts";
 import { checkImageIsFetchable, validateExternalImageUrl } from "../lib/image-url.ts";
@@ -38,9 +41,8 @@ import { createNotification } from "../repositories/notifications.repository.ts"
 import {
   createPost,
   type CreatePostFields,
-  getPostIdByPublicCode,
-  getPostOwnerById,
   getPublishedPostByPublicCode,
+  getPublishedVisiblePostRefByPublicCode,
   getReshareTargetByPublicCode,
   hasPublishedRepost,
 } from "../repositories/posts.repository.ts";
@@ -57,22 +59,26 @@ export const postsRoutes = new Hono();
 
 postsRoutes.get("/:postCode/comments", async (c) => {
   const postCode = c.req.param("postCode");
+  const query = parseOrThrow(CommentListQuerySchema, c.req.query());
 
-  if (!hasDatabase()) {
+  if (!hasDatabase() && allowMockFallback()) {
     if (!getMockPostByCode(postCode)) throw notFound("Post not found.");
-    return c.json({ items: getMockCommentsForPost(postCode) });
+    return c.json({
+      items: getMockCommentsForPost(postCode).slice(0, query.limit),
+      nextCursor: null,
+    });
   }
 
-  const postId = await getPostIdByPublicCode(postCode);
-  if (!postId) throw notFound("Post not found.");
   const viewerId = await getOptionalViewerId(c);
-  return c.json({ items: await listCommentsForPost(postId, viewerId) });
+  const post = await getPublishedVisiblePostRefByPublicCode(postCode, viewerId);
+  if (!post) throw notFound("Post not found.");
+  return c.json(await listCommentsForPost(post.id, query, viewerId));
 });
 
 postsRoutes.get("/:postCode", async (c) => {
   const postCode = c.req.param("postCode");
 
-  if (!hasDatabase()) {
+  if (!hasDatabase() && allowMockFallback()) {
     const post = getMockPostByCode(postCode);
     if (!post) throw notFound("Post not found.");
     return c.json(post);
@@ -143,12 +149,10 @@ postsRoutes.post("/:postCode/reposts", requireUser, async (c) => {
     throw conflict("REPOST_EXISTS", "You already reposted this.");
   }
 
-  const { publicCode } = await createPost({
+  const { publicCode } = await createRepostOrThrow({
     authorId: user.id,
-    postKind: "repost",
     title: reshareTitle(target.title),
     repostOfPostId: target.id,
-    tagIds: [],
   });
   const post = await getPublishedPostByPublicCode(publicCode, user.id);
   if (!post) throw notFound("Post not found after creation.");
@@ -183,19 +187,18 @@ postsRoutes.post("/:postCode/comments", requireUser, async (c) => {
   const postCode = c.req.param("postCode");
   const { bodyText, parentCommentCode } = parseOrThrow(CreateCommentSchema, await readJsonBody(c));
 
-  const postId = await getPostIdByPublicCode(postCode);
-  if (!postId) throw notFound("Post not found.");
+  const post = await getPublishedVisiblePostRefByPublicCode(postCode, user.id);
+  if (!post) throw notFound("Post not found.");
 
   // A blocked user cannot comment on the blocker's post (spec §15).
-  const postOwnerId = await getPostOwnerById(postId);
-  if (postOwnerId && postOwnerId !== user.id && await isBlocked(postOwnerId, user.id)) {
+  if (post.authorId !== user.id && await isBlocked(post.authorId, user.id)) {
     throw forbidden("You can't comment on this post.");
   }
 
   let parentCommentId: string | null = null;
   let parentAuthorId: string | null = null;
   if (parentCommentCode) {
-    const parent = await getReplyParent(postId, parentCommentCode);
+    const parent = await getReplyParent(post.id, parentCommentCode);
     if (!parent) throw notFound("Parent comment not found.");
     if (!parent.isTopLevel) throw badRequest("Replies cannot be nested deeper than one level.");
     // A blocked user cannot reply to the blocker's comment (spec §15).
@@ -207,8 +210,13 @@ postsRoutes.post("/:postCode/comments", requireUser, async (c) => {
   }
 
   const mentionTargets = await resolveMentionTargets(user, bodyText);
-  const publicCode = await createComment({ postId, authorId: user.id, bodyText, parentCommentId });
-  await recordPostEvent({ postId, actorUserId: user.id, eventType: "comment_created" });
+  const publicCode = await createComment({
+    postId: post.id,
+    authorId: user.id,
+    bodyText,
+    parentCommentId,
+  });
+  await recordPostEvent({ postId: post.id, actorUserId: user.id, eventType: "comment_created" });
   const commentRef = await getCommentNotificationRefByCode(publicCode);
   if (commentRef) {
     await createCommentNotifications({
@@ -216,8 +224,8 @@ postsRoutes.post("/:postCode/comments", requireUser, async (c) => {
       commentId: commentRef.id,
       mentionTargetUserIds: mentionTargets.map((target) => target.id),
       parentAuthorId,
-      postId,
-      postOwnerId,
+      postId: post.id,
+      postOwnerId: post.authorId,
     });
   }
 
@@ -231,12 +239,12 @@ postsRoutes.post("/:postCode/reactions", requireUser, async (c) => {
   const postCode = c.req.param("postCode");
   const { value } = parseOrThrow(SetReactionSchema, await readJsonBody(c));
 
-  const postId = await getPostIdByPublicCode(postCode);
-  if (!postId) throw notFound("Post not found.");
+  const post = await getPublishedVisiblePostRefByPublicCode(postCode, user.id);
+  if (!post) throw notFound("Post not found.");
 
-  const result = await setPostReaction(user.id, postId, value);
+  const result = await setPostReaction(user.id, post.id, value);
   if (value !== 0) {
-    await recordPostEvent({ postId, actorUserId: user.id, eventType: "reaction_created" });
+    await recordPostEvent({ postId: post.id, actorUserId: user.id, eventType: "reaction_created" });
   }
   return c.json(result);
 });
@@ -250,6 +258,51 @@ async function resolveTagIds(slugs: string[]): Promise<string[]> {
     throw badRequest("One or more tags are not available.");
   }
   return resolved.tags.map((tag) => tag.id);
+}
+
+async function createRepostOrThrow(input: {
+  authorId: string;
+  title: string;
+  repostOfPostId: string;
+}) {
+  try {
+    return await createPost({
+      authorId: input.authorId,
+      postKind: "repost",
+      title: input.title,
+      repostOfPostId: input.repostOfPostId,
+      tagIds: [],
+    });
+  } catch (error) {
+    if (isPublishedRepostUniqueViolation(error)) {
+      throw conflict("REPOST_EXISTS", "You already reposted this.");
+    }
+    throw error;
+  }
+}
+
+function isPublishedRepostUniqueViolation(error: unknown): boolean {
+  let current: unknown = error;
+  while (current && typeof current === "object") {
+    const candidate = current as {
+      code?: unknown;
+      constraint_name?: unknown;
+      constraint?: unknown;
+      message?: unknown;
+      cause?: unknown;
+    };
+    const message = typeof candidate.message === "string" ? candidate.message : "";
+    if (
+      (candidate.code === "23505" || message.includes("duplicate key")) &&
+      (candidate.constraint_name === "posts_author_published_repost_unique" ||
+        candidate.constraint === "posts_author_published_repost_unique" ||
+        message.includes("posts_author_published_repost_unique"))
+    ) {
+      return true;
+    }
+    current = candidate.cause;
+  }
+  return false;
 }
 
 async function resolveReshareTarget(postCode: string, actorUserId: string) {

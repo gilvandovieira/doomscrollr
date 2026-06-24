@@ -65,6 +65,25 @@ e2eTest("a user can repost a published post once and the target count increments
   assertEquals(duplicate.json.error.code, "REPOST_EXISTS");
 });
 
+e2eTest("duplicate concurrent reposts are controlled by the database guard", async () => {
+  const actor = await claimUser("clerk_e2e_repost_racer", "repostrace");
+  const targetCode = POSTS.shortYoutube.code;
+
+  const results = await Promise.all([
+    api<CreatePostResponse | ErrorBody>(`/api/posts/${targetCode}/reposts`, {
+      method: "POST",
+      asUser: actor,
+    }),
+    api<CreatePostResponse | ErrorBody>(`/api/posts/${targetCode}/reposts`, {
+      method: "POST",
+      asUser: actor,
+    }),
+  ]);
+  const statuses = results.map((result) => result.status).sort();
+  assertEquals(statuses[0], 201);
+  assertEquals(statuses[1], 409);
+});
+
 e2eTest("a user can quote a published post and the target quote count increments", async () => {
   const actor = await claimUser("clerk_e2e_quoter", "quoter");
   const targetCode = POSTS.fridayText.code;

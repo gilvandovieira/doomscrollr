@@ -1,22 +1,26 @@
 import type { Notification } from "@doomscrollr/shared/types.ts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
+import type { TFunction } from "i18next";
 import { AtSign, Bell, CheckCheck, MessageCircle, ShieldCheck } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import {
   fetchNotifications,
   markAllNotificationsRead,
   markNotificationRead,
 } from "../../app/api.ts";
 import { useAuthToken, useIsSignedIn } from "../../app/account.ts";
+import { getLocale } from "../../app/i18n.ts";
 
-const dateFormatter = new Intl.DateTimeFormat("en", {
+const DATE_OPTIONS: Intl.DateTimeFormatOptions = {
   month: "short",
   day: "numeric",
   hour: "numeric",
   minute: "2-digit",
-});
+};
 
 export function NotificationsPage() {
+  const { t } = useTranslation();
   const getToken = useAuthToken();
   const isSignedIn = useIsSignedIn();
   const queryClient = useQueryClient();
@@ -44,8 +48,8 @@ export function NotificationsPage() {
   if (!isSignedIn) {
     return (
       <div className="hard-panel p-5">
-        <p className="meta-label">Notifications</p>
-        <h1 className="mobile-title mt-1">Sign in to view your inbox</h1>
+        <p className="meta-label">{t("notifications.eyebrow")}</p>
+        <h1 className="mobile-title mt-1">{t("notifications.signIn")}</h1>
       </div>
     );
   }
@@ -64,8 +68,8 @@ export function NotificationsPage() {
     return (
       <section className="space-y-4">
         <div className="px-1">
-          <p className="meta-label">Notifications</p>
-          <h1 className="mobile-title">Inbox</h1>
+          <p className="meta-label">{t("notifications.eyebrow")}</p>
+          <h1 className="mobile-title">{t("notifications.inbox")}</h1>
         </div>
         <EmptyNotifications />
       </section>
@@ -78,8 +82,8 @@ export function NotificationsPage() {
     <section className="space-y-4">
       <div className="flex items-end justify-between gap-3 px-1">
         <div>
-          <p className="meta-label">Notifications</p>
-          <h1 className="mobile-title">Inbox</h1>
+          <p className="meta-label">{t("notifications.eyebrow")}</p>
+          <h1 className="mobile-title">{t("notifications.inbox")}</h1>
         </div>
         <button
           type="button"
@@ -88,7 +92,7 @@ export function NotificationsPage() {
           onClick={() => markAllMutation.mutate()}
         >
           <CheckCheck aria-hidden="true" size={17} />
-          Mark all read
+          {t("notifications.markAll")}
         </button>
       </div>
 
@@ -109,10 +113,11 @@ export function NotificationsPage() {
 }
 
 function EmptyNotifications() {
+  const { t } = useTranslation();
   return (
     <div className="hard-panel notification-empty">
       <Bell aria-hidden="true" size={22} strokeWidth={2.3} />
-      <p>You don't have any notifications.</p>
+      <p>{t("notifications.empty")}</p>
     </div>
   );
 }
@@ -126,6 +131,7 @@ function NotificationItem({
   onRead: () => void;
   isMarkingRead: boolean;
 }) {
+  const { t } = useTranslation();
   const isUnread = notification.readAt === null;
   const icon = iconFor(notification.type);
   const body = bodyFor(notification);
@@ -139,9 +145,11 @@ function NotificationItem({
       </span>
       <div className="notification-item__content">
         <div className="notification-item__head">
-          <p className="notification-item__title">{titleFor(notification)}</p>
+          <p className="notification-item__title">{titleFor(notification, t)}</p>
           <time className="meta-label" dateTime={notification.createdAt}>
-            {dateFormatter.format(new Date(notification.createdAt))}
+            {new Intl.DateTimeFormat(getLocale(), DATE_OPTIONS).format(
+              new Date(notification.createdAt),
+            )}
           </time>
         </div>
         {body && <p className="notification-item__body">{body}</p>}
@@ -155,7 +163,7 @@ function NotificationItem({
                 if (isUnread) onRead();
               }}
             >
-              Open
+              {t("notifications.open")}
             </Link>
           )}
           {isUnread && (
@@ -165,7 +173,7 @@ function NotificationItem({
               disabled={isMarkingRead}
               onClick={onRead}
             >
-              Mark read
+              {t("notifications.markRead")}
             </button>
           )}
         </div>
@@ -180,21 +188,21 @@ function iconFor(type: Notification["type"]) {
   return <MessageCircle size={18} strokeWidth={2.35} />;
 }
 
-function titleFor(notification: Notification): string {
+function titleFor(notification: Notification, t: TFunction): string {
   if (notification.type === "moderation_outcome") {
-    const targetType = metadataString(notification.metadata, "targetType") === "comment"
-      ? "comment"
-      : "post";
-    const action = metadataString(notification.metadata, "action") === "restored"
-      ? "restored"
-      : "removed";
-    return `Your ${targetType} was ${action}`;
+    const target = metadataString(notification.metadata, "targetType") === "comment"
+      ? t("notifications.targetComment")
+      : t("notifications.targetPost");
+    const restored = metadataString(notification.metadata, "action") === "restored";
+    return t(restored ? "notifications.moderationRestored" : "notifications.moderationRemoved", {
+      target,
+    });
   }
 
-  const actor = notification.actor ? `@${notification.actor.username}` : "Someone";
-  if (notification.type === "comment_reply") return `${actor} replied to your comment`;
-  if (notification.type === "mention") return `${actor} mentioned you`;
-  return `${actor} replied to your post`;
+  const actor = notification.actor ? `@${notification.actor.username}` : t("notifications.someone");
+  if (notification.type === "comment_reply") return t("notifications.commentReply", { actor });
+  if (notification.type === "mention") return t("notifications.mention", { actor });
+  return t("notifications.postReply", { actor });
 }
 
 function bodyFor(notification: Notification): string | null {

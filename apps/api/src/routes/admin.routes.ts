@@ -87,8 +87,9 @@ adminRoutes.get("/reports", async (c) => {
 });
 
 adminRoutes.get("/moderation/audit", async (c) => {
-  const rawLimit = Number(c.req.query("limit") ?? 30);
-  const limit = Number.isFinite(rawLimit) ? rawLimit : 30;
+  const rawLimit = c.req.query("limit");
+  const numericLimit = Number(rawLimit ?? 30);
+  const limit = rawLimit === "all" ? null : Number.isFinite(numericLimit) ? numericLimit : 30;
   return c.json({ items: await listModerationAuditEvents(limit) });
 });
 

@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import { fetchTags } from "../app/api.ts";
 import { TagLink } from "./TagLink.tsx";
 
@@ -6,6 +7,7 @@ import { TagLink } from "./TagLink.tsx";
 // single-column feed isn't stranded in whitespace. Holds popular tags now and
 // leaves room for Communities and more.
 export function DiscoveryRail() {
+  const { t } = useTranslation();
   const tagsQuery = useQuery({
     queryKey: ["tags"],
     queryFn: fetchTags,
@@ -17,7 +19,7 @@ export function DiscoveryRail() {
     <aside className="discovery-rail">
       {tags.length > 0 && (
         <div className="rail-section">
-          <p className="rail-eyebrow">Popular</p>
+          <p className="rail-eyebrow">{t("discovery.popular")}</p>
           <div className="rail-tags">
             {tags.map((tag) => <TagLink key={tag.slug} slug={tag.slug} />)}
           </div>
@@ -25,8 +27,8 @@ export function DiscoveryRail() {
       )}
 
       <div className="rail-section">
-        <p className="rail-eyebrow">Communities</p>
-        <p className="rail-note">Coming soon — group up around what you post.</p>
+        <p className="rail-eyebrow">{t("discovery.communities")}</p>
+        <p className="rail-note">{t("discovery.comingSoon")}</p>
       </div>
     </aside>
   );

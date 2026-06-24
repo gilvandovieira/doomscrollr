@@ -4,7 +4,7 @@ import { notFound } from "../lib/errors.ts";
 import { enforceRateLimit, RATE_LIMITS } from "../lib/rate-limit.ts";
 import { parseOrThrow, readJsonBody } from "../lib/validation.ts";
 import { getAuthUser, requireUser } from "../middleware/auth.ts";
-import { getCommentRefByCode } from "../repositories/comments.repository.ts";
+import { getPublishedCommentRefByCode } from "../repositories/comments.repository.ts";
 import { recordPostEvent } from "../repositories/events.repository.ts";
 import { setCommentReaction } from "../repositories/reactions.repository.ts";
 
@@ -17,7 +17,7 @@ commentsRoutes.post("/:commentCode/reactions", requireUser, async (c) => {
   const commentCode = c.req.param("commentCode");
   const { value } = parseOrThrow(SetReactionSchema, await readJsonBody(c));
 
-  const ref = await getCommentRefByCode(commentCode);
+  const ref = await getPublishedCommentRefByCode(commentCode, user.id);
   if (!ref) throw notFound("Comment not found.");
 
   const result = await setCommentReaction(user.id, ref.id, value);

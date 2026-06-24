@@ -25,7 +25,9 @@ try {
   const result = await sql.begin(async (tx) => {
     // 1. Drop moderator back-references so the seeded users can be deleted even if
     //    they moderated content we're keeping.
-    await tx.unsafe(`UPDATE posts SET removed_by_user_id = NULL WHERE removed_by_user_id IN ${SEEDED}`);
+    await tx.unsafe(
+      `UPDATE posts SET removed_by_user_id = NULL WHERE removed_by_user_id IN ${SEEDED}`,
+    );
     await tx.unsafe(
       `UPDATE comments SET removed_by_user_id = NULL WHERE removed_by_user_id IN ${SEEDED}`,
     );

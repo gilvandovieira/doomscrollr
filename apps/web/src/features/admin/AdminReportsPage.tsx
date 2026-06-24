@@ -2,47 +2,44 @@ import { REPORT_REASONS } from "@doomscrollr/shared/constants.ts";
 import type {
   AdminDomainBlock,
   AdminReportListQuery,
-  AdminTag,
-  CreateAdminTagInput,
   CreateDomainBlockInput,
   ModerationAuditEvent,
   Report,
   UserStatus,
   UserTrustLevel,
 } from "@doomscrollr/shared/types.ts";
+import { Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Ban,
   CheckCircle2,
   ClipboardCheck,
   Filter,
-  GitMerge,
   Globe2,
   History,
   Plus,
-  Power,
   RotateCcw,
   ShieldAlert,
   ShieldCheck,
   StickyNote,
-  Tags,
   Trash2,
 } from "lucide-react";
 import type { FormEvent } from "react";
 import { useState } from "react";
 import { useAuthToken, useIsSignedIn } from "../../app/account.ts";
+import type { TFunction } from "i18next";
+import { useTranslation } from "react-i18next";
+import { getLocale } from "../../app/i18n.ts";
 import { AdminTabs } from "./admin-nav.tsx";
 import {
   adminAction,
   ApiError,
   bulkReportAction,
   createAdminDomainBlock,
-  createAdminTag,
   createModerationNote,
   deleteAdminDomainBlock,
   fetchAdminDomainBlocks,
   fetchAdminReports,
-  fetchAdminTags,
   fetchModerationAudit,
   setUserModerationStatus,
   setUserTrustLevel,
@@ -80,14 +77,15 @@ const USER_TRUST_LEVEL_OPTIONS: Array<{ value: UserTrustLevel; label: string }> 
   { value: "admin", label: "Admin" },
 ];
 
-const dateFormatter = new Intl.DateTimeFormat(undefined, {
+const DATE_FORMAT_OPTIONS: Intl.DateTimeFormatOptions = {
   month: "short",
   day: "numeric",
   hour: "numeric",
   minute: "2-digit",
-});
+};
 
 export function AdminReportsPage() {
+  const { t } = useTranslation();
   const signedIn = useIsSignedIn();
   const getToken = useAuthToken();
   const queryClient = useQueryClient();
@@ -108,8 +106,8 @@ export function AdminReportsPage() {
     retry: false,
   });
   const auditQuery = useQuery({
-    queryKey: ["moderation-audit"],
-    queryFn: () => fetchModerationAudit(getToken),
+    queryKey: ["moderation-audit", "preview"],
+    queryFn: () => fetchModerationAudit(getToken, { limit: 3 }),
     enabled: signedIn,
     retry: false,
   });
@@ -233,19 +231,15 @@ export function AdminReportsPage() {
     });
   }
 
-  if (!signedIn) {
-    return (
-      <Shell message="Sign in with an admin account. The server checks admin role before every moderation action." />
-    );
-  }
+  if (!signedIn) return <Shell message={t("admin.shell.signIn")} />;
   if (reportsQuery.isPending || domainBlocksQuery.isPending) {
-    return <Shell message="Loading the moderation queue and policy tools." />;
+    return <Shell message={t("admin.shell.loadingModeration")} />;
   }
   if (reportsQuery.isError || domainBlocksQuery.isError) {
     const error = reportsQuery.error ?? domainBlocksQuery.error;
     const message = error instanceof ApiError && error.status === 403
-      ? "Admin access required. This console is gated by server-verified role."
-      : "Could not load admin data. Reports, domain policy, and audit history stay unavailable until the read succeeds.";
+      ? t("admin.shell.accessRequired")
+      : t("admin.shell.loadModerationError");
     return <Shell message={message} />;
   }
 
@@ -263,29 +257,25 @@ export function AdminReportsPage() {
 
       <header className="admin-workbench__masthead">
         <div className="admin-workbench__identity">
-          <p className="meta-label">Moderator console</p>
-          <h1 className="mobile-title admin-workbench__title">Admin docket</h1>
-          <p className="admin-workbench__summary">
-            Keep the SFW WhatsApp loop safe without turning moderation into a separate product.
-            Reports should end in a clear content decision, a user decision, or a documented
-            dismissal.
-          </p>
+          <p className="meta-label">{t("admin.console.eyebrow")}</p>
+          <h1 className="mobile-title admin-workbench__title">{t("admin.console.title")}</h1>
+          <p className="admin-workbench__summary">{t("admin.console.summary")}</p>
         </div>
         <dl className="admin-case-tape" aria-label="Visible queue summary">
           <div className="admin-case-tape__item admin-case-tape__item--open">
-            <dt>Open</dt>
+            <dt>{t("admin.tape.open")}</dt>
             <dd>{openCount}</dd>
           </div>
           <div className="admin-case-tape__item">
-            <dt>Actioned</dt>
+            <dt>{t("admin.tape.actioned")}</dt>
             <dd>{actionedCount}</dd>
           </div>
           <div className="admin-case-tape__item">
-            <dt>User cases</dt>
+            <dt>{t("admin.tape.userCases")}</dt>
             <dd>{userCaseCount}</dd>
           </div>
           <div className="admin-case-tape__item">
-            <dt>Selected</dt>
+            <dt>{t("admin.tape.selected")}</dt>
             <dd>{visibleSelectedCount}</dd>
           </div>
         </dl>
@@ -293,21 +283,18 @@ export function AdminReportsPage() {
 
       <section className="admin-policy-brief" aria-label="Moderation policy brief">
         <p>
-          <strong>SFW-only means remove, not gate.</strong>{" "}
-          Confirmed unsafe, spam, harassment, nudity, hate, or suggestive-beyond-policy content
-          should be removed. Removed posts fall back to the unavailable page and a safe preview
-          instead of leaking the original share card.
+          <strong>{t("admin.policy.removeStrong")}</strong> {t("admin.policy.removeRest")}
         </p>
         <div className="admin-policy-brief__rules">
           <span>
-            <strong>Dismiss</strong> when no content or account change is needed.
+            <strong>{t("admin.policy.dismissStrong")}</strong> {t("admin.policy.dismissRest")}
           </span>
           <span>
-            <strong>Mark actioned</strong> after removal, restore, note, status, or trust work.
+            <strong>{t("admin.policy.actionedStrong")}</strong> {t("admin.policy.actionedRest")}
           </span>
           <span>
-            <strong>Stay proportionate</strong>: filters, notes, audit, and bulk tools are enough
-            until real volume proves otherwise.
+            <strong>{t("admin.policy.proportionalStrong")}</strong>
+            {t("admin.policy.proportionalRest")}
           </span>
         </div>
       </section>
@@ -316,27 +303,24 @@ export function AdminReportsPage() {
         <section className="hard-panel admin-queue" aria-labelledby="admin-reports-title">
           <div className="admin-panel-heading">
             <div>
-              <p className="meta-label">Reports</p>
+              <p className="meta-label">{t("admin.queue.eyebrow")}</p>
               <h2 id="admin-reports-title" className="admin-section-title">
-                Review queue
+                {t("admin.queue.title")}
               </h2>
-              <p className="admin-panel-copy">
-                {formatFilterSummary(filters)}{" "}
-                Targets are public codes or usernames, not internal database ids.
-              </p>
+              <p className="admin-panel-copy">{t("admin.queue.targetsNote")}</p>
             </div>
             <span className="admin-count-chip">
-              {reports.length} {reports.length === 1 ? "case" : "cases"}
+              {t("admin.cases", { count: reports.length })}
             </span>
           </div>
 
           <div className="admin-filter-bar" aria-label="Report filters">
             <div className="admin-filter-bar__label">
               <Filter size={16} aria-hidden="true" />
-              <span>Filter cases</span>
+              <span>{t("admin.filter.label")}</span>
             </div>
             <label className="admin-filter">
-              <span>Status</span>
+              <span>{t("admin.filter.status")}</span>
               <select
                 className="field-control"
                 value={filters.status}
@@ -345,12 +329,14 @@ export function AdminReportsPage() {
                   updateFilter("status", event.currentTarget.value as ReportFilters["status"])}
               >
                 {STATUS_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>{option.label}</option>
+                  <option key={option.value} value={option.value}>
+                    {t(`admin.statusOpt.${option.value}`)}
+                  </option>
                 ))}
               </select>
             </label>
             <label className="admin-filter">
-              <span>Target</span>
+              <span>{t("admin.filter.target")}</span>
               <select
                 className="field-control"
                 value={filters.targetType}
@@ -362,12 +348,14 @@ export function AdminReportsPage() {
                   )}
               >
                 {TARGET_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>{option.label}</option>
+                  <option key={option.value} value={option.value}>
+                    {t(`admin.targetOpt.${option.value}`)}
+                  </option>
                 ))}
               </select>
             </label>
             <label className="admin-filter">
-              <span>Reason</span>
+              <span>{t("admin.filter.reason")}</span>
               <select
                 className="field-control"
                 value={filters.reason}
@@ -375,9 +363,9 @@ export function AdminReportsPage() {
                 onChange={(event) =>
                   updateFilter("reason", event.currentTarget.value as ReportFilters["reason"])}
               >
-                <option value="all">All reasons</option>
+                <option value="all">{t("admin.filter.allReasons")}</option>
                 {REPORT_REASONS.map((reason) => (
-                  <option key={reason} value={reason}>{humanReason(reason)}</option>
+                  <option key={reason} value={reason}>{t(`report.reasons.${reason}`)}</option>
                 ))}
               </select>
             </label>
@@ -389,19 +377,16 @@ export function AdminReportsPage() {
             <div className="admin-bulk-bar" aria-label="Bulk report actions">
               <div>
                 <p className="admin-bulk-bar__title">
-                  {visibleSelectedCount} selected for batch review
+                  {t("admin.bulk.selected", { count: visibleSelectedCount })}
                 </p>
-                <p className="admin-bulk-bar__hint">
-                  Bulk actions change report status and can attach one shared note. Remove or
-                  restore the target first when the content itself needs to change.
-                </p>
+                <p className="admin-bulk-bar__hint">{t("admin.bulk.hint")}</p>
                 <textarea
                   className="field-control admin-bulk-bar__note"
                   value={bulkNote}
                   onChange={(event) =>
                     setBulkNote(event.currentTarget.value)}
-                  placeholder="Optional note for selected targets"
-                  aria-label="Optional note for selected targets"
+                  placeholder={t("admin.bulk.notePlaceholder")}
+                  aria-label={t("admin.bulk.notePlaceholder")}
                   rows={2}
                 />
               </div>
@@ -413,7 +398,7 @@ export function AdminReportsPage() {
                     runBulk("dismissed")}
                 >
                   <CheckCircle2 size={16} aria-hidden="true" />
-                  Dismiss
+                  {t("admin.bulk.dismiss")}
                 </button>
                 <button
                   type="button"
@@ -421,7 +406,7 @@ export function AdminReportsPage() {
                   onClick={() => runBulk("actioned")}
                 >
                   <ClipboardCheck size={16} aria-hidden="true" />
-                  Mark actioned
+                  {t("admin.bulk.markActioned")}
                 </button>
               </div>
             </div>
@@ -431,10 +416,8 @@ export function AdminReportsPage() {
             ? (
               <div className="admin-empty">
                 <ShieldCheck size={22} aria-hidden="true" />
-                <p>No reports match these filters.</p>
-                <span>
-                  No safety work is visible here. Widen the status, target, or reason filter.
-                </span>
+                <p>{t("admin.empty.title")}</p>
+                <span>{t("admin.empty.body")}</span>
               </div>
             )
             : (
@@ -483,6 +466,7 @@ function AdminDomainBlocksPanel({
   onCreate: (input: CreateDomainBlockInput) => Promise<void>;
   onDelete: (domain: string) => Promise<void>;
 }) {
+  const { t } = useTranslation();
   const [domain, setDomain] = useState("");
   const [reason, setReason] = useState("");
 
@@ -502,57 +486,50 @@ function AdminDomainBlocksPanel({
     >
       <div className="admin-panel-heading">
         <div>
-          <p className="meta-label">Blocked domains</p>
+          <p className="meta-label">{t("admin.domains.eyebrow")}</p>
           <h2 id="admin-domain-blocks-title" className="admin-section-title">
-            Link policy
+            {t("admin.domains.title")}
           </h2>
-          <p className="admin-panel-copy">
-            Block spammy or unsafe source domains from new external-image and YouTube posts.
-            Existing canonical posts keep their normal moderation path.
-          </p>
+          <p className="admin-panel-copy">{t("admin.domains.copy")}</p>
         </div>
         <span className="admin-count-chip">
           <Globe2 size={14} aria-hidden="true" />
-          {blocks.length} blocked
+          {t("admin.domains.blocked", { count: blocks.length })}
         </span>
       </div>
 
       <form onSubmit={submit} className="admin-domain-form">
         <label className="admin-filter">
-          <span>Domain</span>
+          <span>{t("admin.domains.domain")}</span>
           <input
             value={domain}
             onChange={(event) => setDomain(event.currentTarget.value)}
-            placeholder="example.com"
-            aria-label="Domain to block"
+            placeholder={t("admin.domains.domainPlaceholder")}
+            aria-label={t("admin.domains.domain")}
             className="field-control admin-mono-field"
             required
           />
         </label>
         <label className="admin-filter">
-          <span>Reason</span>
+          <span>{t("admin.domains.reason")}</span>
           <input
             value={reason}
             onChange={(event) => setReason(event.currentTarget.value)}
-            placeholder="Spam source"
-            aria-label="Reason for blocking domain"
+            placeholder={t("admin.domains.reasonPlaceholder")}
+            aria-label={t("admin.domains.reason")}
             className="field-control"
           />
         </label>
         <button type="submit" className="tool-button bg-signal text-pitch">
           <Plus size={16} aria-hidden="true" />
-          Block domain
+          {t("admin.domains.block")}
         </button>
       </form>
 
       {error && <p className="admin-error">{error}</p>}
 
       {blocks.length === 0
-        ? (
-          <p className="admin-empty admin-empty--inline">
-            No domains are blocked. New media links still use URL validation and provider checks.
-          </p>
-        )
+        ? <p className="admin-empty admin-empty--inline">{t("admin.domains.empty")}</p>
         : (
           <div className="admin-domain-list">
             {blocks.map((block) => (
@@ -560,8 +537,8 @@ function AdminDomainBlocksPanel({
                 <div>
                   <p className="admin-domain-row__domain">{block.domain}</p>
                   <p className="admin-domain-row__meta">
-                    {block.reason || "No reason recorded."} Added by @{block.createdBy.username}
-                    {" "}
+                    {block.reason || t("admin.domains.noReason")}{" "}
+                    {t("admin.domains.addedBy", { user: block.createdBy.username })}{" "}
                     {formatDate(block.createdAt)}
                   </p>
                 </div>
@@ -571,7 +548,7 @@ function AdminDomainBlocksPanel({
                   onClick={() => onDelete(block.domain)}
                 >
                   <Trash2 size={16} aria-hidden="true" />
-                  Unblock
+                  {t("admin.domains.unblock")}
                 </button>
               </article>
             ))}
@@ -598,6 +575,7 @@ function ReportRow({
   onUserStatus: (report: Report, status: UserStatus) => Promise<void>;
   onUserTrustLevel: (report: Report, trustLevel: UserTrustLevel) => Promise<void>;
 }) {
+  const { t } = useTranslation();
   const [noteDraft, setNoteDraft] = useState("");
   const code = report.targetCode;
   const reportOpen = report.status === "open";
@@ -628,22 +606,26 @@ function ReportRow({
             <span className="admin-type-chip">{report.targetType}</span>
             <strong>{code}</strong>
             <span className={`admin-status-chip admin-status-chip--${report.status}`}>
-              {report.status}
+              {t(`admin.statusOpt.${report.status}`)}
             </span>
-            <span className="admin-reason-pill">{humanReason(report.reason)}</span>
+            <span className="admin-reason-pill">{t(`report.reasons.${report.reason}`)}</span>
             <span className={reviewPriorityChipClass(report.reviewPriority)}>
-              P{report.reviewPriority} {reviewPriorityLabel(report.reviewPriority)}
+              P{report.reviewPriority}{" "}
+              {t(`enum.priority.${reviewPriorityLabel(report.reviewPriority)}`)}
             </span>
           </div>
           <p className="meta-label">
-            Reported by @{report.reporter.username} ({report.reporterTrustLevel}) at{" "}
-            {formatDate(report.createdAt)}
+            {t("reportRow.reportedBy", {
+              user: report.reporter.username,
+              trust: t(`enum.trust.${report.reporterTrustLevel}`),
+              date: formatDate(report.createdAt),
+            })}
           </p>
         </div>
 
         <div className="admin-report-row__evidence">
-          <span>Reporter detail</span>
-          <p>{report.details?.trim() || "No reporter details."}</p>
+          <span>{t("reportRow.reporterNote")}</span>
+          <p>{report.details?.trim() || t("reportRow.noReporterNote")}</p>
         </div>
 
         {report.notes.length > 0 && (
@@ -665,25 +647,27 @@ function ReportRow({
             className="field-control"
             value={noteDraft}
             onChange={(event) => setNoteDraft(event.currentTarget.value)}
-            placeholder="Add moderator note"
-            aria-label={`Add moderator note for ${report.targetType} ${code}`}
+            placeholder={t("reportRow.addNote")}
+            aria-label={`${t("reportRow.addNote")} (${report.targetType} ${code})`}
             rows={2}
           />
           <button type="submit" className="tool-button" disabled={!noteDraft.trim()}>
             <StickyNote size={16} aria-hidden="true" />
-            Add note
+            {t("reportRow.addNoteBtn")}
           </button>
         </form>
 
         {report.targetType === "user" && (
           <div className="admin-user-status" aria-label={`User controls for ${code}`}>
-            <p className="admin-user-status__copy">
-              Status changes affect whether this account can keep writing. Trust level is internal
-              for limits, report weight, and review priority; it is not public karma.
-            </p>
+            <p className="admin-user-status__copy">{t("reportRow.userControlsCopy")}</p>
             <div className="admin-user-status__row">
               <span>
-                Account status: <strong>{report.targetUserStatus ?? "unknown"}</strong>
+                {t("reportRow.accountStatus")}{" "}
+                <strong>
+                  {report.targetUserStatus
+                    ? t(`enum.status.${report.targetUserStatus}`)
+                    : t("reportRow.unknown")}
+                </strong>
               </span>
               <div className="admin-user-status__actions">
                 {USER_STATUS_OPTIONS.map((option) => (
@@ -701,7 +685,7 @@ function ReportRow({
                       : option.value === "active"
                       ? <ShieldCheck size={16} aria-hidden="true" />
                       : <ShieldAlert size={16} aria-hidden="true" />}
-                    {option.label}
+                    {t(`enum.statusAction.${option.value}`)}
                   </button>
                 ))}
               </div>
@@ -709,7 +693,12 @@ function ReportRow({
 
             <div className="admin-user-status__row">
               <span>
-                Trust level: <strong>{report.targetUserTrustLevel ?? "unknown"}</strong>
+                {t("reportRow.trustLevel")}{" "}
+                <strong>
+                  {report.targetUserTrustLevel
+                    ? t(`enum.trust.${report.targetUserTrustLevel}`)
+                    : t("reportRow.unknown")}
+                </strong>
               </span>
               <div className="admin-user-status__actions">
                 {USER_TRUST_LEVEL_OPTIONS.map((option) => (
@@ -721,7 +710,7 @@ function ReportRow({
                     onClick={() => onUserTrustLevel(report, option.value)}
                   >
                     {trustLevelIcon(option.value)}
-                    {option.label}
+                    {t(`enum.trust.${option.value}`)}
                   </button>
                 ))}
               </div>
@@ -741,7 +730,7 @@ function ReportRow({
                 onClick={() => onAction(`posts/${code}/remove`)}
               >
                 <Trash2 size={16} aria-hidden="true" />
-                Remove post
+                {t("reportRow.removePost")}
               </button>
               <button
                 type="button"
@@ -749,7 +738,7 @@ function ReportRow({
                 onClick={() => onAction(`posts/${code}/restore`)}
               >
                 <RotateCcw size={16} aria-hidden="true" />
-                Restore post
+                {t("reportRow.restorePost")}
               </button>
             </>
           )}
@@ -761,7 +750,7 @@ function ReportRow({
                 onClick={() => onAction(`comments/${code}/remove`)}
               >
                 <Trash2 size={16} aria-hidden="true" />
-                Remove comment
+                {t("reportRow.removeComment")}
               </button>
               <button
                 type="button"
@@ -769,7 +758,7 @@ function ReportRow({
                 onClick={() => onAction(`comments/${code}/restore`)}
               >
                 <RotateCcw size={16} aria-hidden="true" />
-                Restore comment
+                {t("reportRow.restoreComment")}
               </button>
             </>
           )}
@@ -780,7 +769,7 @@ function ReportRow({
             onClick={() => onAction(`reports/${report.id}/dismiss`)}
           >
             <CheckCircle2 size={16} aria-hidden="true" />
-            Dismiss
+            {t("admin.bulk.dismiss")}
           </button>
           <button
             type="button"
@@ -789,7 +778,7 @@ function ReportRow({
             onClick={() => onAction(`reports/${report.id}/action`)}
           >
             <ClipboardCheck size={16} aria-hidden="true" />
-            Mark actioned
+            {t("admin.bulk.markActioned")}
           </button>
         </div>
       </div>
@@ -806,61 +795,59 @@ function AuditPanel({
   loading: boolean;
   error: boolean;
 }) {
+  const { t } = useTranslation();
   return (
     <section className="hard-panel admin-audit" aria-labelledby="admin-audit-title">
       <div className="admin-panel-heading">
         <div>
-          <p className="meta-label">History</p>
-          <h2 id="admin-audit-title" className="admin-section-title">Audit log</h2>
+          <p className="meta-label">{t("admin.audit.eyebrow")}</p>
+          <h2 id="admin-audit-title" className="admin-section-title">{t("admin.audit.title")}</h2>
           <p className="admin-panel-copy">
             {events.length === 0
-              ? "Notes, removals, restores, report outcomes, and user changes will appear here."
-              : `${events.length} recent actions across notes, removals, restores, reports, and users.`}
+              ? t("admin.audit.emptyCopy")
+              : t("admin.audit.count", { count: events.length })}
           </p>
         </div>
         <History size={18} aria-hidden="true" />
       </div>
 
       {loading
-        ? <p className="admin-empty admin-empty--inline">Loading audit history.</p>
+        ? <p className="admin-empty admin-empty--inline">{t("admin.audit.loading")}</p>
         : error
-        ? <p className="admin-error">Could not load audit history.</p>
+        ? <p className="admin-error">{t("admin.audit.loadError")}</p>
         : events.length === 0
-        ? <p className="admin-empty admin-empty--inline">No moderation history yet.</p>
+        ? <p className="admin-empty admin-empty--inline">{t("admin.audit.empty")}</p>
         : (
           <div className="admin-audit-list">
             {events.map((event) => (
               <div key={event.id} className="admin-audit-event">
                 <span className="admin-type-chip">{event.targetType}</span>
                 <p>
-                  <strong>{labelAuditAction(event.action)}</strong> {event.targetCode}
-                  <span>by @{event.actor.username} - {formatDate(event.createdAt)}</span>
+                  <strong>{labelAuditAction(event.action, t)}</strong> {event.targetCode}
+                  <span>
+                    {t("admin.audit.by", { user: event.actor.username })}{" "}
+                    {formatDate(event.createdAt)}
+                  </span>
                 </p>
               </div>
             ))}
           </div>
         )}
+      <Link to="/admin/history" className="tool-button admin-audit__link">
+        <History size={16} aria-hidden="true" />
+        {t("admin.audit.viewAll")}
+      </Link>
     </section>
   );
 }
 
-function humanReason(reason: string): string {
-  return reason.replace(/_/g, " ");
-}
-
 function formatDate(value: string): string {
-  return dateFormatter.format(new Date(value));
+  // Follow the app's chosen display language, not the browser locale.
+  return new Intl.DateTimeFormat(getLocale(), DATE_FORMAT_OPTIONS).format(new Date(value));
 }
 
-function labelAuditAction(action: ModerationAuditEvent["action"]): string {
-  return action.replace(/_/g, " ");
-}
-
-function formatFilterSummary(filters: ReportFilters): string {
-  const status = filters.status === "all" ? "every status" : `${filters.status} reports`;
-  const target = filters.targetType === "all" ? "all targets" : `${filters.targetType} targets`;
-  const reason = filters.reason === "all" ? "all reasons" : humanReason(filters.reason);
-  return `Showing ${status} across ${target} for ${reason}.`;
+function labelAuditAction(action: ModerationAuditEvent["action"], t: TFunction): string {
+  return t(`enum.auditAction.${action}`);
 }
 
 function reviewPriorityLabel(priority: number): string {

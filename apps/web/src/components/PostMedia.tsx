@@ -1,5 +1,6 @@
 import type { FeedPost } from "@doomscrollr/shared/types.ts";
 import { Link } from "@tanstack/react-router";
+import { useTranslation } from "react-i18next";
 import { cleanReshareTitle, sourceKindLabel } from "../lib/post-display.ts";
 import { YouTubeEmbed } from "./YouTubeEmbed.tsx";
 
@@ -75,12 +76,13 @@ export function PostMedia({ post, mode }: PostMediaProps) {
 }
 
 function SourcePostPreview({ post, mode }: { post: SourcePost; mode: "card" | "detail" }) {
+  const { t } = useTranslation();
   const preview = (
     <div className={`source-post source-post--${mode}`}>
       <div className="source-post__meta">
-        <span>From @{post.author.username}</span>
+        <span>{t("post.from", { user: post.author.username })}</span>
         <span aria-hidden="true">·</span>
-        <span>{sourceKindLabel(post.postKind)}</span>
+        <span>{sourceKindLabel(post.postKind, t)}</span>
       </div>
       <p className="source-post__title">{cleanReshareTitle(post.title)}</p>
       <SourcePostBody post={post} />

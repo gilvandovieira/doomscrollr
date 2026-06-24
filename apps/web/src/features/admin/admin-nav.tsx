@@ -1,9 +1,11 @@
 import { Link } from "@tanstack/react-router";
-import { ShieldCheck, Tags } from "lucide-react";
+import { History, ShieldCheck, Tags } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
-// Switches between the two console surfaces. Moderation is reactive safety work
-// (the report queue); Administration is proactive site curation (the tag set).
-export function AdminTabs({ active }: { active: "moderation" | "administration" }) {
+// Switches between the console surfaces. Moderation is reactive safety work,
+// History is the audit trail, and Administration is proactive site curation.
+export function AdminTabs({ active }: { active: "moderation" | "history" | "administration" }) {
+  const { t } = useTranslation();
   return (
     <nav className="admin-tabs" aria-label="Console sections">
       <Link
@@ -12,7 +14,15 @@ export function AdminTabs({ active }: { active: "moderation" | "administration" 
         aria-current={active === "moderation" ? "page" : undefined}
       >
         <ShieldCheck size={16} aria-hidden="true" />
-        Moderation
+        {t("admin.tab.moderation")}
+      </Link>
+      <Link
+        to="/admin/history"
+        className={active === "history" ? "admin-tab admin-tab--active" : "admin-tab"}
+        aria-current={active === "history" ? "page" : undefined}
+      >
+        <History size={16} aria-hidden="true" />
+        {t("admin.tab.history")}
       </Link>
       <Link
         to="/admin/tags"
@@ -20,7 +30,7 @@ export function AdminTabs({ active }: { active: "moderation" | "administration" 
         aria-current={active === "administration" ? "page" : undefined}
       >
         <Tags size={16} aria-hidden="true" />
-        Administration
+        {t("admin.tab.administration")}
       </Link>
     </nav>
   );

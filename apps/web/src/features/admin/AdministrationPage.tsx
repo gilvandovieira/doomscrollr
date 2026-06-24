@@ -2,7 +2,8 @@ import type { AdminTag, CreateAdminTagInput } from "@doomscrollr/shared/types.ts
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { GitMerge, Plus, Power } from "lucide-react";
 import type { FormEvent } from "react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useAuthToken, useIsSignedIn } from "../../app/account.ts";
 import { adminAction, ApiError, createAdminTag, fetchAdminTags } from "../../app/api.ts";
 import { AdminShell, AdminTabs } from "./admin-nav.tsx";
@@ -10,6 +11,7 @@ import { AdminShell, AdminTabs } from "./admin-nav.tsx";
 // Administration: curate the fixed tag set users choose from. Three separate
 // tools — create, merge, enable/disable — instead of one crammed control.
 export function AdministrationPage() {
+  const { t } = useTranslation();
   const signedIn = useIsSignedIn();
   const getToken = useAuthToken();
   const queryClient = useQueryClient();
@@ -49,14 +51,12 @@ export function AdministrationPage() {
     }
   }
 
-  if (!signedIn) {
-    return <AdminShell message="Sign in with an admin account. The server checks admin role before every change." />;
-  }
-  if (tagsQuery.isPending) return <AdminShell message="Loading the tag set." />;
+  if (!signedIn) return <AdminShell message={t("admin.shell.signIn")} />;
+  if (tagsQuery.isPending) return <AdminShell message={t("admin.shell.loadingTags")} />;
   if (tagsQuery.isError) {
     const message = tagsQuery.error instanceof ApiError && tagsQuery.error.status === 403
-      ? "Admin access required. This console is gated by server-verified role."
-      : "Could not load the tag set. Tag tools stay unavailable until the read succeeds.";
+      ? t("admin.shell.accessRequired")
+      : t("admin.shell.loadTagsError");
     return <AdminShell message={message} />;
   }
 
@@ -71,28 +71,25 @@ export function AdministrationPage() {
 
       <header className="admin-workbench__masthead">
         <div className="admin-workbench__identity">
-          <p className="meta-label">Administration</p>
-          <h1 className="mobile-title admin-workbench__title">Tag curation</h1>
-          <p className="admin-workbench__summary">
-            Users attach tags from a fixed, curated set — there is no public free-form tag creation.
-            Add the tags worth having, fold duplicates together, and turn tags on or off.
-          </p>
+          <p className="meta-label">{t("admin.tags.eyebrow")}</p>
+          <h1 className="mobile-title admin-workbench__title">{t("admin.tags.title")}</h1>
+          <p className="admin-workbench__summary">{t("admin.tags.summary")}</p>
         </div>
         <dl className="admin-case-tape" aria-label="Tag set summary">
           <div className="admin-case-tape__item admin-case-tape__item--open">
-            <dt>Active</dt>
+            <dt>{t("admin.tags.tape.active")}</dt>
             <dd>{activeCount}</dd>
           </div>
           <div className="admin-case-tape__item">
-            <dt>Disabled</dt>
+            <dt>{t("admin.tags.tape.disabled")}</dt>
             <dd>{disabledCount}</dd>
           </div>
           <div className="admin-case-tape__item">
-            <dt>Total</dt>
+            <dt>{t("admin.tags.tape.total")}</dt>
             <dd>{tags.length}</dd>
           </div>
           <div className="admin-case-tape__item">
-            <dt>Aliases</dt>
+            <dt>{t("admin.tags.tape.aliases")}</dt>
             <dd>{aliasCount}</dd>
           </div>
         </dl>
@@ -103,12 +100,11 @@ export function AdministrationPage() {
       <section className="hard-panel admin-tool" aria-labelledby="admin-create-title">
         <div className="admin-panel-heading">
           <div>
-            <p className="meta-label">Create a tag</p>
-            <h2 id="admin-create-title" className="admin-section-title">Add to the set</h2>
-            <p className="admin-panel-copy">
-              A new tag is active right away and selectable on posts. The slug is the permanent
-              handle; the name is what people read.
-            </p>
+            <p className="meta-label">{t("admin.tags.createEyebrow")}</p>
+            <h2 id="admin-create-title" className="admin-section-title">
+              {t("admin.tags.createTitle")}
+            </h2>
+            <p className="admin-panel-copy">{t("admin.tags.createCopy")}</p>
           </div>
         </div>
         <CreateTagTool onCreate={createTag} />
@@ -117,12 +113,11 @@ export function AdministrationPage() {
       <section className="hard-panel admin-tool" aria-labelledby="admin-merge-title">
         <div className="admin-panel-heading">
           <div>
-            <p className="meta-label">Merge tags</p>
-            <h2 id="admin-merge-title" className="admin-section-title">Fold a duplicate in</h2>
-            <p className="admin-panel-copy">
-              Combine two tags that mean the same thing. The absorbed tag's posts move to the one you
-              keep, and it turns into an alias so old links still resolve.
-            </p>
+            <p className="meta-label">{t("admin.tags.mergeEyebrow")}</p>
+            <h2 id="admin-merge-title" className="admin-section-title">
+              {t("admin.tags.mergeTitle")}
+            </h2>
+            <p className="admin-panel-copy">{t("admin.tags.mergeCopy")}</p>
           </div>
         </div>
         <MergeTagsTool
@@ -134,12 +129,11 @@ export function AdministrationPage() {
       <section className="hard-panel admin-tool" aria-labelledby="admin-manage-title">
         <div className="admin-panel-heading">
           <div>
-            <p className="meta-label">Enable or disable</p>
-            <h2 id="admin-manage-title" className="admin-section-title">The current set</h2>
-            <p className="admin-panel-copy">
-              Disabled tags stay on their existing posts but can't be added to new ones. Re-enable any
-              time.
-            </p>
+            <p className="meta-label">{t("admin.tags.manageEyebrow")}</p>
+            <h2 id="admin-manage-title" className="admin-section-title">
+              {t("admin.tags.manageTitle")}
+            </h2>
+            <p className="admin-panel-copy">{t("admin.tags.manageCopy")}</p>
           </div>
         </div>
         <ManageTagsTool
@@ -153,6 +147,7 @@ export function AdministrationPage() {
 }
 
 function CreateTagTool({ onCreate }: { onCreate: (input: CreateAdminTagInput) => Promise<void> }) {
+  const { t } = useTranslation();
   const [form, setForm] = useState<CreateAdminTagInput>({
     slug: "",
     displayName: "",
@@ -172,42 +167,42 @@ function CreateTagTool({ onCreate }: { onCreate: (input: CreateAdminTagInput) =>
   return (
     <form onSubmit={submit} className="admin-tag-form">
       <label className="admin-filter">
-        <span>Slug</span>
+        <span>{t("admin.tags.slug")}</span>
         <input
           value={form.slug}
           onChange={(event) => setForm((current) => ({ ...current, slug: event.target.value }))}
           placeholder="wholesome-chaos"
-          aria-label="Tag slug"
+          aria-label={t("admin.tags.slug")}
           className="field-control admin-mono-field"
           required
         />
       </label>
       <label className="admin-filter">
-        <span>Name users see</span>
+        <span>{t("admin.tags.name")}</span>
         <input
           value={form.displayName}
           onChange={(event) =>
             setForm((current) => ({ ...current, displayName: event.target.value }))}
-          placeholder="Wholesome chaos"
-          aria-label="Tag name users see"
+          placeholder={t("admin.tags.namePlaceholder")}
+          aria-label={t("admin.tags.name")}
           className="field-control"
           required
         />
       </label>
       <label className="admin-filter">
-        <span>Curator note</span>
+        <span>{t("admin.tags.note")}</span>
         <input
           value={form.description ?? ""}
           onChange={(event) =>
             setForm((current) => ({ ...current, description: event.target.value }))}
-          placeholder="Optional"
-          aria-label="Tag curator note"
+          placeholder={t("admin.tags.optional")}
+          aria-label={t("admin.tags.note")}
           className="field-control"
         />
       </label>
       <button type="submit" className="tool-button bg-signal text-pitch">
         <Plus size={16} aria-hidden="true" />
-        Create tag
+        {t("admin.tags.create")}
       </button>
     </form>
   );
@@ -216,9 +211,15 @@ function CreateTagTool({ onCreate }: { onCreate: (input: CreateAdminTagInput) =>
 function MergeTagsTool(
   { tags, onMerge }: { tags: AdminTag[]; onMerge: (source: string, target: string) => void },
 ) {
+  const { t } = useTranslation();
   const [source, setSource] = useState("");
   const [target, setTarget] = useState("");
   const [confirming, setConfirming] = useState(false);
+  const confirmDialogRef = useRef<HTMLDivElement>(null);
+  const cancelButtonRef = useRef<HTMLButtonElement>(null);
+  const mergeButtonRef = useRef<HTMLButtonElement>(null);
+  const reviewButtonRef = useRef<HTMLButtonElement>(null);
+  const sourceSelectRef = useRef<HTMLSelectElement>(null);
 
   const sourceTag = tags.find((tag) => tag.slug === source);
   // The server only merges into an active tag, so only offer those (minus self).
@@ -236,30 +237,81 @@ function MergeTagsTool(
     setSource("");
     setTarget("");
     setConfirming(false);
+    globalThis.requestAnimationFrame(() => sourceSelectRef.current?.focus());
   }
 
+  function closeConfirmation() {
+    setConfirming(false);
+    globalThis.requestAnimationFrame(() => reviewButtonRef.current?.focus());
+  }
+
+  function trapConfirmationKeys(event: React.KeyboardEvent<HTMLDivElement>) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeConfirmation();
+      return;
+    }
+
+    if (event.key !== "Tab") return;
+
+    const focusable = Array.from(
+      confirmDialogRef.current?.querySelectorAll<HTMLElement>(
+        "button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), " +
+          'textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      ) ?? [],
+    );
+    if (focusable.length === 0) return;
+
+    const activeIndex = focusable.indexOf(document.activeElement as HTMLElement);
+    if (activeIndex === -1) return;
+
+    event.preventDefault();
+    const direction = event.shiftKey ? -1 : 1;
+    const nextIndex = (activeIndex + direction + focusable.length) % focusable.length;
+    focusable[nextIndex].focus();
+  }
+
+  function cycleConfirmationButtonFocus(event: React.KeyboardEvent<HTMLButtonElement>) {
+    if (event.key !== "Tab") return;
+    event.preventDefault();
+
+    if (event.currentTarget === cancelButtonRef.current) {
+      mergeButtonRef.current?.focus();
+      return;
+    }
+
+    cancelButtonRef.current?.focus();
+  }
+
+  useEffect(() => {
+    if (!confirming) return;
+    const frame = globalThis.requestAnimationFrame(() => cancelButtonRef.current?.focus());
+    return () => globalThis.cancelAnimationFrame(frame);
+  }, [confirming]);
+
   if (tags.length < 2) {
-    return <p className="admin-tool__empty">Create at least two tags before you can merge.</p>;
+    return <p className="admin-tool__empty">{t("admin.tags.needTwo")}</p>;
   }
 
   return (
     <div className="admin-merge">
       <div className="admin-merge__sentence">
-        <span className="admin-merge__word">Merge</span>
+        <span className="admin-merge__word">{t("admin.tags.mergeWord")}</span>
         <select
+          ref={sourceSelectRef}
           className="field-control admin-mono-field"
           aria-label="Tag to absorb"
           value={source}
           onChange={(event) => pickSource(event.currentTarget.value)}
         >
-          <option value="">choose a tag…</option>
+          <option value="">{t("admin.tags.chooseTag")}</option>
           {tags.map((tag) => (
             <option key={tag.slug} value={tag.slug}>
-              #{tag.slug} · {tag.postCount} {tag.postCount === 1 ? "post" : "posts"}
+              #{tag.slug} · {t("admin.tags.posts", { count: tag.postCount })}
             </option>
           ))}
         </select>
-        <span className="admin-merge__word">into</span>
+        <span className="admin-merge__word">{t("admin.tags.into")}</span>
         <select
           className="field-control admin-mono-field"
           aria-label="Tag to keep"
@@ -270,43 +322,60 @@ function MergeTagsTool(
             setConfirming(false);
           }}
         >
-          <option value="">choose a tag…</option>
+          <option value="">{t("admin.tags.chooseTag")}</option>
           {targetOptions.map((tag) => <option key={tag.slug} value={tag.slug}>#{tag.slug}</option>)}
         </select>
       </div>
 
       {confirming && sourceTag
         ? (
-          <div className="admin-merge-confirm" role="alertdialog" aria-label="Confirm merge">
-            <p className="admin-merge-confirm__q">Merge #{source} into #{target}?</p>
-            <p className="admin-merge-confirm__detail">
-              {sourceTag.postCount} {sourceTag.postCount === 1 ? "post moves" : "posts move"} to{" "}
-              #{target}. #{source} becomes an alias of #{target} and is disabled. This can't be undone.
+          <div
+            ref={confirmDialogRef}
+            className="admin-merge-confirm"
+            role="alertdialog"
+            aria-labelledby="admin-merge-confirm-title"
+            aria-describedby="admin-merge-confirm-detail"
+            onKeyDownCapture={trapConfirmationKeys}
+          >
+            <p id="admin-merge-confirm-title" className="admin-merge-confirm__q">
+              {t("admin.tags.confirmQ", { source, target })}
+            </p>
+            <p id="admin-merge-confirm-detail" className="admin-merge-confirm__detail">
+              {t("admin.tags.confirmDetail", { count: sourceTag.postCount, source, target })}
             </p>
             <div className="admin-merge-confirm__actions">
-              <button type="button" className="tool-button" onClick={() => setConfirming(false)}>
-                Cancel
+              <button
+                ref={cancelButtonRef}
+                type="button"
+                className="tool-button"
+                onClick={closeConfirmation}
+                onKeyDown={cycleConfirmationButtonFocus}
+              >
+                {t("admin.tags.cancel")}
               </button>
               <button
+                ref={mergeButtonRef}
                 type="button"
                 className="tool-button admin-danger-button"
                 onClick={confirmMerge}
+                onKeyDown={cycleConfirmationButtonFocus}
               >
                 <GitMerge size={16} aria-hidden="true" />
-                Merge tags
+                {t("admin.tags.mergeTags")}
               </button>
             </div>
           </div>
         )
         : (
           <button
+            ref={reviewButtonRef}
             type="button"
             className="tool-button"
             disabled={!canReview}
             onClick={() => setConfirming(true)}
           >
             <GitMerge size={16} aria-hidden="true" />
-            Review merge
+            {t("admin.tags.review")}
           </button>
         )}
     </div>
@@ -316,6 +385,7 @@ function MergeTagsTool(
 function ManageTagsTool(
   { tags, onToggle }: { tags: AdminTag[]; onToggle: (tag: AdminTag) => void },
 ) {
+  const { t } = useTranslation();
   return (
     <div className="admin-tag-grid">
       {tags.map((tag) => (
@@ -326,17 +396,24 @@ function ManageTagsTool(
               <p className="admin-tag-row__name">{tag.displayName}</p>
               <div className="admin-tag-row__meta">
                 <span>{tag.status}</span>
-                <span>{tag.postCount} {tag.postCount === 1 ? "post" : "posts"}</span>
+                <span>{t("admin.tags.posts", { count: tag.postCount })}</span>
               </div>
               {tag.aliases.length > 0 && (
                 <p className="admin-tag-row__aliases">
-                  aliases: {tag.aliases.map((alias) => `#${alias}`).join(", ")}
+                  {t("admin.tags.aliases", {
+                    list: tag.aliases.map((alias) => `#${alias}`).join(", "),
+                  })}
                 </p>
               )}
             </div>
-            <button type="button" className="tool-button" onClick={() => onToggle(tag)}>
+            <button
+              type="button"
+              className="tool-button"
+              onClick={() =>
+                onToggle(tag)}
+            >
               <Power size={16} aria-hidden="true" />
-              {tag.status === "active" ? "Disable" : "Enable"}
+              {tag.status === "active" ? t("admin.tags.disable") : t("admin.tags.enable")}
             </button>
           </div>
         </article>

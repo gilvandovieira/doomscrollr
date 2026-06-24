@@ -61,6 +61,9 @@ export const users = pgTable("users", {
   role: userRole("role").notNull().default("user"),
   status: userStatus("status").notNull().default("active"),
   trustLevel: userTrustLevel("trust_level").notNull().default("new"),
+  // Display preferences (nullable = follow device/browser). See migration 0009.
+  locale: text("locale"),
+  themePreference: text("theme_preference"),
   ...timestamps,
 }, (table) => [
   uniqueIndex("users_clerk_user_id_unique").on(table.clerkUserId),
@@ -143,6 +146,8 @@ export const posts = pgTable("posts", {
   index("posts_repost_target_idx").on(table.repostOfPostId).where(
     sql`${table.repostOfPostId} IS NOT NULL`,
   ),
+  uniqueIndex("posts_author_published_repost_unique").on(table.authorId, table.repostOfPostId)
+    .where(sql`${table.postKind} = 'repost' AND ${table.status} = 'published'`),
 ]);
 
 export const comments = pgTable("comments", {

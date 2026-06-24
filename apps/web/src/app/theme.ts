@@ -39,7 +39,10 @@ function apply(value: ThemePref): void {
   else root.setAttribute("data-theme", value);
 
   root.style.colorScheme = resolved;
-  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", THEME_COLOR[resolved]);
+  document.querySelector('meta[name="theme-color"]')?.setAttribute(
+    "content",
+    THEME_COLOR[resolved],
+  );
 }
 
 export function getThemePref(): ThemePref {

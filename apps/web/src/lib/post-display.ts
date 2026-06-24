@@ -1,4 +1,5 @@
 import type { FeedPost } from "@doomscrollr/shared/types.ts";
+import type { TFunction } from "i18next";
 
 type PostLike = Pick<FeedPost, "postKind" | "title" | "repostOf">;
 
@@ -14,17 +15,22 @@ export function postDisplayTitle(post: PostLike): string {
   return cleanReshareTitle(post.title);
 }
 
-export function postKindLabel(kind: FeedPost["postKind"]): string {
-  if (kind === "external_image") return "Image";
-  if (kind === "youtube") return "YouTube";
-  if (kind === "repost") return "Reposted";
-  if (kind === "quote") return "Quoted";
-  return "Text";
+// The server stores this exact title when a YouTube post has no derivable title
+// (resolveYouTubeTitle fallback). It's a system string, not user content, so we
+// localize it at display time. Keep in sync with the API fallback.
+const SERVER_FALLBACK_TITLE = "Shared video";
+
+export function localizeFallbackTitle(title: string, t: TFunction): string {
+  return title === SERVER_FALLBACK_TITLE ? t("post.untitledVideo") : title;
 }
 
-export function sourceKindLabel(kind: FeedPost["postKind"]): string {
-  if (kind === "external_image") return "Image";
-  if (kind === "youtube") return "YouTube";
-  if (kind === "text") return "Text";
-  return "Post";
+export function postKindLabel(kind: FeedPost["postKind"], t: TFunction): string {
+  return t(`post.kind.${kind}`);
+}
+
+export function sourceKindLabel(kind: FeedPost["postKind"], t: TFunction): string {
+  if (kind === "external_image" || kind === "youtube" || kind === "text") {
+    return t(`post.source.${kind}`);
+  }
+  return t("post.source.other");
 }

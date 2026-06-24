@@ -1,14 +1,17 @@
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Bell, ChevronsDown, PenSquare, ShieldCheck } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { fetchNotifications } from "../app/api.ts";
 import { useAuthToken, useIsAdmin, useIsSignedIn } from "../app/account.ts";
 import { AuthControls } from "./AuthControls.tsx";
+import { SettingsButton } from "./SettingsDialog.tsx";
 import { ThemeToggle } from "./ThemeToggle.tsx";
 
 // App bar. On mobile it's the sticky top bar; on desktop it spans the top of the
 // centered layout and carries the quick "New post" + auth actions.
 export function Header() {
+  const { t } = useTranslation();
   const location = useLocation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -73,13 +76,19 @@ export function Header() {
           <span className="brand-mark__word">Doomscrollr</span>
         </Link>
 
-        <Link to="/create" className="tool-button bg-signal text-pitch top-chrome__create">
+        <Link
+          to="/create"
+          className="tool-button bg-signal text-pitch top-chrome__create"
+          aria-label={t("header.newPost")}
+          title={t("header.newPost")}
+        >
           <PenSquare aria-hidden="true" size={17} />
-          <span className="top-chrome__create-label">New post</span>
+          <span className="top-chrome__create-label">{t("header.newPost")}</span>
         </Link>
 
         <NotificationsLink />
         <AdminConsoleLink />
+        <SettingsButton />
 
         <span className="top-chrome__theme">
           <ThemeToggle />

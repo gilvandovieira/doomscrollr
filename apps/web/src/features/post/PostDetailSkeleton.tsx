@@ -4,7 +4,9 @@
 // The `animate-pulse` is neutralized by the global reduced-motion rule.
 
 function Sk({ className }: { className?: string }) {
-  return <div aria-hidden="true" className={`animate-pulse rounded-md bg-ink/10 ${className ?? ""}`} />;
+  return (
+    <div aria-hidden="true" className={`animate-pulse rounded-md bg-ink/10 ${className ?? ""}`} />
+  );
 }
 
 export function PostDetailSkeleton() {
@@ -58,7 +60,10 @@ export function PostDetailSkeleton() {
         <div className="space-y-4 p-4">
           <Sk className="h-24 w-full rounded-xl" />
           {[0, 1].map((row) => (
-            <div key={row} className="space-y-2 rounded-2xl border border-ink/10 bg-newsprint p-3.5">
+            <div
+              key={row}
+              className="space-y-2 rounded-2xl border border-ink/10 bg-newsprint p-3.5"
+            >
               <Sk className="h-3 w-24 rounded-full" />
               <Sk className="h-3.5 w-full" />
               <Sk className="h-3.5 w-4/5" />

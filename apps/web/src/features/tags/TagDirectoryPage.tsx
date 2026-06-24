@@ -1,9 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { Hash } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { fetchTags } from "../../app/api.ts";
 
 export function TagDirectoryPage() {
+  const { t } = useTranslation();
   const tagsQuery = useQuery({
     queryKey: ["tags"],
     queryFn: fetchTags,
@@ -22,8 +24,8 @@ export function TagDirectoryPage() {
   if (tagsQuery.isError) {
     return (
       <div className="hard-panel p-5">
-        <p className="meta-label text-oxide">Tags unavailable</p>
-        <p className="mt-2 text-sm font-bold">Could not load the tag directory.</p>
+        <p className="meta-label text-oxide">{t("tagDir.unavailable")}</p>
+        <p className="mt-2 text-sm font-bold">{t("tagDir.loadError")}</p>
       </div>
     );
   }
@@ -31,8 +33,8 @@ export function TagDirectoryPage() {
   return (
     <section className="space-y-4">
       <div className="px-1">
-        <p className="meta-label">Curated tags</p>
-        <h1 className="mobile-title">Browse by tag</h1>
+        <p className="meta-label">{t("tagDir.eyebrow")}</p>
+        <h1 className="mobile-title">{t("tagDir.title")}</h1>
       </div>
 
       <div className="tag-directory">
@@ -53,7 +55,7 @@ export function TagDirectoryPage() {
               )}
             </span>
             <span className="tag-directory__count">
-              {tag.postCount} {tag.postCount === 1 ? "post" : "posts"}
+              {t("tagDir.posts", { count: tag.postCount })}
             </span>
           </Link>
         ))}

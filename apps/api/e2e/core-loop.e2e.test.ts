@@ -18,6 +18,68 @@ e2eTest("health endpoint reports ok", async () => {
   assertEquals(res.json.service, "doomscrollr-api");
 });
 
+e2eTest("ready endpoint checks database connectivity", async () => {
+  const res = await api<{ status: string; checks: { database: string } }>("/ready");
+  assertStatus(res, 200);
+  assertEquals(res.json.status, "ready");
+  assertEquals(res.json.checks.database, "ok");
+});
+
+e2eTest("API responses include baseline security headers", async () => {
+  const res = await api("/health");
+  assertStatus(res, 200);
+  assertEquals(res.headers.get("x-content-type-options"), "nosniff");
+  assertEquals(res.headers.get("referrer-policy"), "strict-origin-when-cross-origin");
+  assert(
+    res.headers.get("permissions-policy")?.includes("camera=()"),
+    "permissions policy should disable camera access",
+  );
+  assert(
+    res.headers.get("content-security-policy")?.includes("frame-ancestors"),
+    "CSP should include frame-ancestors",
+  );
+});
+
+e2eTest("production responses include HSTS and CSP", async () => {
+  const code = `
+    const { app } = await import("./apps/api/src/app.ts");
+    const response = await app.request("https://api.example.com/health");
+    console.log(JSON.stringify({
+      hsts: response.headers.get("strict-transport-security"),
+      csp: response.headers.get("content-security-policy"),
+      nosniff: response.headers.get("x-content-type-options"),
+    }));
+  `;
+  const command = new Deno.Command(Deno.execPath(), {
+    args: ["eval", code],
+    env: {
+      APP_ENV: "production",
+      PORT: "8000",
+      DATABASE_URL: "postgres://user:pass@db.example.com:5432/doomscrollr",
+      PUBLIC_BASE_URL: "https://api.example.com",
+      WEB_ORIGIN: "https://app.example.com",
+      CLERK_SECRET_KEY: "sk_live_placeholder",
+      CLERK_AUTHORIZED_PARTIES: "https://app.example.com",
+      LOG_LEVEL: "fatal",
+    },
+    stdout: "piped",
+    stderr: "piped",
+  });
+  const output = await command.output();
+  if (output.code !== 0) {
+    throw new Error(new TextDecoder().decode(output.stderr));
+  }
+
+  const headers = JSON.parse(new TextDecoder().decode(output.stdout)) as {
+    hsts: string | null;
+    csp: string | null;
+    nosniff: string | null;
+  };
+  assertEquals(headers.nosniff, "nosniff");
+  assert(headers.hsts?.includes("max-age=31536000"), "production HSTS header missing");
+  assert(headers.csp?.includes("upgrade-insecure-requests"), "production CSP should upgrade HTTP");
+});
+
 e2eTest("recent feed serves seeded posts to anonymous readers", async () => {
   const res = await api<FeedResponse>("/api/feed/recent");
   assertStatus(res, 200);
@@ -210,6 +272,97 @@ e2eTest("create -> appears in feed -> read -> comment -> reply -> react", async 
   assertEquals(cleared.json.value, null, "ana's reaction cleared");
   assertEquals(cleared.json.score, 1, "author self-upvote remains after ana clears");
   assertEquals(cleared.json.reactionCount, 1, "author self-upvote remains in the count");
+});
+
+e2eTest("comment list is paginated and reply fan-out is capped", async () => {
+  const created = await api<CreatePostResponse>("/api/posts", {
+    asUser: USERS.maya.clerkId,
+    body: {
+      postKind: "text",
+      title: "E2E: comment pagination target",
+      bodyText: "A small thread used only to verify pagination.",
+      tags: [],
+    },
+  });
+  assertStatus(created, 201);
+  const code = created.json.post.publicCode;
+
+  const commentCodes: string[] = [];
+  for (let i = 0; i < 3; i += 1) {
+    const comment = await api<Comment>(`/api/posts/${code}/comments`, {
+      asUser: USERS.ren.clerkId,
+      body: { bodyText: `Top-level comment ${i}` },
+    });
+    assertStatus(comment, 201);
+    commentCodes.push(comment.json.publicCode);
+  }
+
+  for (let i = 0; i < 2; i += 1) {
+    const reply = await api<Comment>(`/api/posts/${code}/comments`, {
+      asUser: USERS.ana.clerkId,
+      body: { bodyText: `Reply ${i}`, parentCommentCode: commentCodes[0] },
+    });
+    assertStatus(reply, 201);
+  }
+
+  const firstPage = await api<{ items: Comment[]; nextCursor: string | null }>(
+    `/api/posts/${code}/comments?limit=2&repliesLimit=1`,
+  );
+  assertStatus(firstPage, 200);
+  assertEquals(firstPage.json.items.length, 2, "first page should respect top-level limit");
+  assert(firstPage.json.nextCursor !== null, "first page should expose next cursor");
+  assertEquals(
+    firstPage.json.items.find((comment) => comment.publicCode === commentCodes[0])?.replies.length,
+    1,
+    "repliesLimit should cap replies per top-level comment",
+  );
+
+  const secondPage = await api<{ items: Comment[]; nextCursor: string | null }>(
+    `/api/posts/${code}/comments?limit=2&cursor=${encodeURIComponent(firstPage.json.nextCursor!)}`,
+  );
+  assertStatus(secondPage, 200);
+  assert(
+    secondPage.json.items.some((comment) => comment.publicCode === commentCodes[2]),
+    "second page should include comments after the cursor",
+  );
+});
+
+e2eTest("duplicate concurrent post reactions are idempotent", async () => {
+  const actor = "clerk_e2e_concurrent_reactor";
+  const claimed = await api("/api/account/username", {
+    asUser: actor,
+    body: { username: "reactrace" },
+  });
+  assertStatus(claimed, 201);
+
+  const created = await api<CreatePostResponse>("/api/posts", {
+    asUser: USERS.maya.clerkId,
+    body: {
+      postKind: "text",
+      title: "E2E: concurrent reaction target",
+      bodyText: "Multiple identical reactions should not duplicate counters.",
+      tags: [],
+    },
+  });
+  assertStatus(created, 201);
+  const code = created.json.post.publicCode;
+
+  const results = await Promise.all(
+    Array.from({ length: 5 }, () =>
+      api<ReactionResult>(`/api/posts/${code}/reactions`, {
+        asUser: actor,
+        body: { value: 1 },
+      })),
+  );
+  assert(
+    results.every((result) => result.status === 200),
+    `all duplicate reactions should be controlled 200s, got ${results.map((r) => r.status)}`,
+  );
+
+  const detail = await api<PostDetail>(`/api/posts/${code}`, { asUser: actor });
+  assertStatus(detail, 200);
+  assertEquals(detail.json.score, 2, "author self-upvote plus one actor upvote");
+  assertEquals(detail.json.reactionCount, 2, "duplicate upvotes should count once");
 });
 
 e2eTest("tag aliases canonicalize on post creation", async () => {

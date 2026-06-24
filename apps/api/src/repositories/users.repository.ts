@@ -19,6 +19,8 @@ export type LocalUser = {
   role: UserRole;
   status: UserStatus;
   trustLevel: UserTrustLevel;
+  locale: string | null;
+  themePreference: string | null;
 };
 
 const localUserColumns = {
@@ -29,6 +31,8 @@ const localUserColumns = {
   role: users.role,
   status: users.status,
   trustLevel: users.trustLevel,
+  locale: users.locale,
+  themePreference: users.themePreference,
 };
 
 function requireDb() {
@@ -132,6 +136,24 @@ export async function setUsername(userId: string, username: string): Promise<Loc
   const rows = await requireDb()
     .update(users)
     .set({ username, updatedAt: new Date() })
+    .where(eq(users.id, userId))
+    .returning(localUserColumns);
+  return rows[0];
+}
+
+// Update display preferences. Only the keys present in `prefs` change; an explicit
+// null clears that preference (back to following the device).
+export async function updateUserPreferences(
+  userId: string,
+  prefs: { locale?: string | null; themePreference?: string | null },
+): Promise<LocalUser> {
+  const patch: Record<string, unknown> = { updatedAt: new Date() };
+  if ("locale" in prefs) patch.locale = prefs.locale ?? null;
+  if ("themePreference" in prefs) patch.themePreference = prefs.themePreference ?? null;
+
+  const rows = await requireDb()
+    .update(users)
+    .set(patch)
     .where(eq(users.id, userId))
     .returning(localUserColumns);
   return rows[0];

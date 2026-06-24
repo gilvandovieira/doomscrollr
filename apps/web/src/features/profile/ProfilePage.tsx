@@ -1,11 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
 import { useParams } from "@tanstack/react-router";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useAccount, useAuthToken, useIsSignedIn } from "../../app/account.ts";
 import { blockUser, fetchUser, fetchUserPosts, unblockUser } from "../../app/api.ts";
 import { PostCard } from "../feed/PostCard.tsx";
 
 export function ProfilePage() {
+  const { t } = useTranslation();
   const params = useParams({ strict: false }) as { username?: string };
   const username = params.username ?? "";
   const handle = username.replace(/^@/, "");
@@ -23,9 +25,9 @@ export function ProfilePage() {
     enabled: username.startsWith("@"),
   });
 
-  if (!username.startsWith("@")) return <Shell message="Route not found" />;
-  if (userQuery.isPending) return <Shell message="Loading profile…" />;
-  if (userQuery.isError || !userQuery.data) return <Shell message="Profile not found" />;
+  if (!username.startsWith("@")) return <Shell message={t("profile.routeNotFound")} />;
+  if (userQuery.isPending) return <Shell message={t("profile.loading")} />;
+  if (userQuery.isError || !userQuery.data) return <Shell message={t("profile.notFound")} />;
 
   const user = userQuery.data;
   const posts = postsQuery.data?.items ?? [];
@@ -44,10 +46,10 @@ export function ProfilePage() {
             {user.displayName ?? user.username}
           </h1>
           <div className="mt-3 flex flex-wrap items-center gap-2.5 text-sm font-medium text-ink/70">
-            <span>{user.postCount} posts</span>
+            <span>{t("profile.posts", { count: user.postCount })}</span>
             <span aria-hidden="true" className="text-ink/30">·</span>
-            <span>{user.commentCount} comments</span>
-            {user.role === "admin" && <span className="tag-chip">admin</span>}
+            <span>{t("profile.comments", { count: user.commentCount })}</span>
+            {user.role === "admin" && <span className="tag-chip">{t("profile.admin")}</span>}
             <BlockControl profileUsername={user.username} />
           </div>
         </div>
@@ -56,7 +58,7 @@ export function ProfilePage() {
       {posts.length === 0
         ? (
           <div className="hard-panel p-5">
-            <p className="text-sm font-bold">No posts yet.</p>
+            <p className="text-sm font-bold">{t("profile.noPosts")}</p>
           </div>
         )
         : (
@@ -75,6 +77,7 @@ export function ProfilePage() {
 }
 
 function BlockControl({ profileUsername }: { profileUsername: string }) {
+  const { t } = useTranslation();
   const signedIn = useIsSignedIn();
   const account = useAccount();
   const getToken = useAuthToken();
@@ -106,9 +109,10 @@ function BlockControl({ profileUsername }: { profileUsername: string }) {
       type="button"
       onClick={toggle}
       disabled={busy}
+      aria-pressed={blocked}
       className="rounded-full border border-ink/15 bg-paper px-3 py-1.5 font-semibold transition hover:bg-oxide hover:text-pitch"
     >
-      {blocked ? "Unblock" : "Block"}
+      {blocked ? t("profile.unblock") : t("profile.block")}
     </button>
   );
 }

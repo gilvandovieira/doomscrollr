@@ -1,5 +1,6 @@
 import { ExternalLink, PlayCircle } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 // A plain <iframe> can't tell us when a video refuses to embed — it just loads
 // YouTube's own "unavailable" page cross-origin. The IFrame Player API does:
@@ -35,26 +36,27 @@ let apiReady: Promise<YTNamespace> | null = null;
 
 // Load the IFrame Player API once and share the promise across every embed.
 function loadYouTubeApi(): Promise<YTNamespace> {
-  if (typeof window === "undefined") return Promise.reject(new Error("no window"));
-  if (window.YT?.Player) return Promise.resolve(window.YT);
+  if (typeof document === "undefined") return Promise.reject(new Error("no document"));
+  const host = globalThis as Window & typeof globalThis;
+  if (host.YT?.Player) return Promise.resolve(host.YT);
   if (apiReady) return apiReady;
 
   apiReady = new Promise<YTNamespace>((resolve, reject) => {
-    const previous = window.onYouTubeIframeAPIReady;
-    const timeout = window.setTimeout(() => {
-      if (window.YT?.Player) {
-        resolve(window.YT);
+    const previous = host.onYouTubeIframeAPIReady;
+    const timeout = setTimeout(() => {
+      if (host.YT?.Player) {
+        resolve(host.YT);
         return;
       }
       apiReady = null;
       reject(new Error("youtube api timeout"));
     }, 5000);
 
-    window.onYouTubeIframeAPIReady = () => {
+    host.onYouTubeIframeAPIReady = () => {
       previous?.();
-      if (window.YT?.Player) {
-        window.clearTimeout(timeout);
-        resolve(window.YT);
+      if (host.YT?.Player) {
+        clearTimeout(timeout);
+        resolve(host.YT);
       }
     };
 
@@ -63,7 +65,7 @@ function loadYouTubeApi(): Promise<YTNamespace> {
       tag.src = "https://www.youtube.com/iframe_api";
       tag.async = true;
       tag.onerror = () => {
-        window.clearTimeout(timeout);
+        clearTimeout(timeout);
         apiReady = null;
         reject(new Error("youtube api load failed"));
       };
@@ -74,6 +76,7 @@ function loadYouTubeApi(): Promise<YTNamespace> {
 }
 
 export function YouTubeEmbed({ videoId, title }: { videoId: string; title: string }) {
+  const { t } = useTranslation();
   const frameRef = useRef<HTMLDivElement | null>(null);
   const [fallback, setFallback] = useState<EmbedFallback | null>(null);
   const watchUrl = `https://www.youtube.com/watch?v=${videoId}`;
@@ -121,13 +124,13 @@ export function YouTubeEmbed({ videoId, title }: { videoId: string; title: strin
       {blocked && (
         <div className="yt-embed__fallback" role="note">
           <PlayCircle className="yt-embed__icon" aria-hidden="true" size={32} />
-          <p className="yt-embed__title">Can't play here</p>
+          <p className="yt-embed__title">{t("post.embed.cantPlay")}</p>
           <p className="yt-embed__note">
             {fallback === "api"
-              ? "YouTube could not load in this browser right now."
+              ? t("post.embed.apiError")
               : fallback === 100
-              ? "This video is private or no longer available."
-              : "This video's owner disabled playback on other sites."}
+              ? t("post.embed.unavailable")
+              : t("post.embed.disabled")}
           </p>
           <a
             className="yt-embed__cta"
@@ -135,7 +138,7 @@ export function YouTubeEmbed({ videoId, title }: { videoId: string; title: strin
             target="_blank"
             rel="noopener noreferrer"
           >
-            Watch on YouTube
+            {t("post.embed.watch")}
             <ExternalLink aria-hidden="true" size={15} />
           </a>
           <span className="sr-only">{title}</span>
