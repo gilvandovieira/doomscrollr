@@ -295,16 +295,20 @@ Goal: strengthen retention, safety, and sharing only after v1 proves the loop.
   - user suspension/ban flow
   - restore history
 - [x] `V2-012` Move rate limits to Redis or another shared store if needed.
-- [ ] `V2-013` Add internal trust levels:
+- [x] `V2-013` Add internal trust levels:
   - new
   - normal
   - trusted
   - limited
   - moderator
   - admin
-- [ ] `V2-014` Consider BELL short links only if canonical URLs are too long or attribution matters.
-- [ ] `V2-015` Consider suggestive non-NSFW content only after user controls and moderation capacity
-      exist.
+- [x] `V2-014` Consider BELL short links only if canonical URLs are too long or attribution matters.
+      _(deferred: canonical post URLs remain under the current short-link policy budget, and
+      attribution-heavy sharing is not yet proven.)_
+- [x] `V2-015` Consider suggestive non-NSFW content only after user controls and moderation capacity
+      exist. _(deferred: moderation exists, but there is no logged-in user control/preferences
+      surface for suggestive filtering yet; creation/public schemas continue to reject
+      suggestive/mature metadata.)_
 - [ ] `V2-016` Consider one additional media provider only if users request it repeatedly.
 
 ### Still Not V2 By Default

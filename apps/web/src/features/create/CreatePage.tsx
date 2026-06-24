@@ -128,7 +128,8 @@ export function CreatePage() {
             type="button"
             onClick={() => setKind(tab.kind)}
             aria-pressed={kind === tab.kind}
-            className={`tool-button px-2 ${kind === tab.kind ? "bg-signal text-pitch" : ""}`}
+            data-kind={tab.kind}
+            className="tool-button create-kind-tab px-2"
           >
             {tab.label}
           </button>
@@ -136,7 +137,7 @@ export function CreatePage() {
       </div>
 
       <form onSubmit={submit} className="hard-panel space-y-3 p-4">
-        <Field label="Title">
+        <Field label={kind === "text" || kind === "youtube" ? "Title (optional)" : "Title"}>
           <div className="title-field">
             <input
               value={title}
@@ -144,7 +145,9 @@ export function CreatePage() {
                 setTitle(event.target.value);
                 titleTouched.current = event.target.value.trim().length > 0;
               }}
-              placeholder="Say something"
+              placeholder={kind === "text"
+                ? "Optional — we'll use your first sentence"
+                : "Say something"}
               className="field-control min-h-11 px-3 text-sm"
               maxLength={180}
               aria-busy={titleLoading}

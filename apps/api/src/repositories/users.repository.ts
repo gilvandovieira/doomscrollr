@@ -1,6 +1,11 @@
 import { comments, posts, users } from "@doomscrollr/database/schema.ts";
 import { generateId } from "@doomscrollr/shared/lib/ids.ts";
-import type { UserProfile, UserRole, UserStatus } from "@doomscrollr/shared/types.ts";
+import type {
+  UserProfile,
+  UserRole,
+  UserStatus,
+  UserTrustLevel,
+} from "@doomscrollr/shared/types.ts";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "../db/client.ts";
 import { toUserProfile, type UserRow } from "./transformers.ts";
@@ -13,6 +18,7 @@ export type LocalUser = {
   avatarUrl: string | null;
   role: UserRole;
   status: UserStatus;
+  trustLevel: UserTrustLevel;
 };
 
 const localUserColumns = {
@@ -22,6 +28,7 @@ const localUserColumns = {
   avatarUrl: users.avatarUrl,
   role: users.role,
   status: users.status,
+  trustLevel: users.trustLevel,
 };
 
 function requireDb() {
@@ -49,9 +56,23 @@ export async function getUserIdByUsername(username: string): Promise<string | nu
 
 export async function getUserModerationTargetByUsername(
   username: string,
-): Promise<{ id: string; username: string; status: UserStatus } | null> {
+): Promise<
+  {
+    id: string;
+    username: string;
+    role: UserRole;
+    status: UserStatus;
+    trustLevel: UserTrustLevel;
+  } | null
+> {
   const rows = await requireDb()
-    .select({ id: users.id, username: users.username, status: users.status })
+    .select({
+      id: users.id,
+      username: users.username,
+      role: users.role,
+      status: users.status,
+      trustLevel: users.trustLevel,
+    })
     .from(users)
     .where(eq(users.username, username))
     .limit(1);
@@ -125,6 +146,33 @@ export async function setUserStatusByUsername(
     .set({ status, updatedAt: new Date() })
     .where(eq(users.username, username))
     .returning({ id: users.id, username: users.username, status: users.status });
+  return rows[0] ?? null;
+}
+
+export async function setUserTrustLevelByUsername(
+  username: string,
+  trustLevel: UserTrustLevel,
+): Promise<
+  {
+    id: string;
+    username: string;
+    role: UserRole;
+    status: UserStatus;
+    trustLevel: UserTrustLevel;
+  } | null
+> {
+  const role: UserRole = trustLevel === "admin" ? "admin" : "user";
+  const rows = await requireDb()
+    .update(users)
+    .set({ role, trustLevel, updatedAt: new Date() })
+    .where(eq(users.username, username))
+    .returning({
+      id: users.id,
+      username: users.username,
+      role: users.role,
+      status: users.status,
+      trustLevel: users.trustLevel,
+    });
   return rows[0] ?? null;
 }
 

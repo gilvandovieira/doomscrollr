@@ -1,4 +1,8 @@
-import { PRODUCT_CODENAME } from "@doomscrollr/shared/constants.ts";
+import {
+  POST_SLUG_MAX_LENGTH,
+  PRODUCT_CODENAME,
+  PUBLIC_CODE_LENGTH,
+} from "@doomscrollr/shared/constants.ts";
 import type { FeedPost } from "@doomscrollr/shared/types.ts";
 
 // Generic branded preview used for text posts, removed/unavailable posts, and as a
@@ -7,6 +11,11 @@ import type { FeedPost } from "@doomscrollr/shared/types.ts";
 export const DEFAULT_OG_IMAGE = "https://placehold.co/1200x630/0b0b0b/f5f5f5.png?text=Doomscrollr";
 
 const GENERIC_DESCRIPTION = `Join the discussion on ${PRODUCT_CODENAME}`;
+
+// V2-014: BELL short links stay deferred while canonical post URLs are bounded
+// and shareable. This threshold is intentionally conservative; WhatsApp accepts
+// much longer URLs, but short-link infrastructure needs a clearer product reason.
+export const BELL_CANONICAL_URL_LENGTH_THRESHOLD = 160;
 
 function escapeHtml(value: string): string {
   return value
@@ -24,6 +33,15 @@ function truncate(value: string, max = 160): string {
 
 export function buildCanonicalPostUrl(baseUrl: string, post: FeedPost): string {
   return `${baseUrl.replace(/\/$/, "")}/p/${post.publicCode}/${post.slug}`;
+}
+
+export function maxCanonicalPostUrlLength(baseUrl: string): number {
+  return baseUrl.replace(/\/$/, "").length + "/p/".length + PUBLIC_CODE_LENGTH + 1 +
+    POST_SLUG_MAX_LENGTH;
+}
+
+export function canonicalUrlsNeedBell(baseUrl: string): boolean {
+  return maxCanonicalPostUrlLength(baseUrl) > BELL_CANONICAL_URL_LENGTH_THRESHOLD;
 }
 
 function youtubeThumbnail(videoId: string): string {

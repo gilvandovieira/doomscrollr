@@ -343,6 +343,95 @@ e2eTest("a report enters the admin queue and can be dismissed", async () => {
   );
 });
 
+e2eTest("admin can change internal trust levels and admin trust controls access", async () => {
+  const before = await api<{ items: Report[] }>("/api/admin/reports?status=all", {
+    asUser: USERS.admin.clerkId,
+  });
+  assertStatus(before, 200);
+  const beforeIds = new Set(before.json.items.map((report) => report.id));
+
+  const filed = await api<{ ok: boolean }>("/api/reports", {
+    asUser: USERS.maya.clerkId,
+    body: {
+      targetType: "user",
+      targetCode: USERS.ana.username,
+      reason: "harassment",
+      details: "trust level e2e",
+    },
+  });
+  assertStatus(filed, 201);
+
+  const reportList = await api<{ items: Report[] }>("/api/admin/reports?status=all", {
+    asUser: USERS.admin.clerkId,
+  });
+  assertStatus(reportList, 200);
+  const report = reportList.json.items.find((item) => !beforeIds.has(item.id));
+  assert(report !== undefined, "new user report should be visible");
+  assertEquals(report.targetUserTrustLevel, "normal");
+
+  const trusted = await api<{ ok: boolean }>(
+    `/api/admin/users/${USERS.ana.username}/trust-level`,
+    {
+      asUser: USERS.admin.clerkId,
+      body: { trustLevel: "trusted", reason: "e2e trust" },
+    },
+  );
+  assertStatus(trusted, 200);
+
+  const refreshed = await api<{ items: Report[] }>("/api/admin/reports?status=all", {
+    asUser: USERS.admin.clerkId,
+  });
+  const refreshedReport = refreshed.json.items.find((item) => item.id === report.id);
+  assert(refreshedReport !== undefined, "report should still be present after trust change");
+  assertEquals(refreshedReport.targetUserTrustLevel, "trusted");
+
+  const audit = await api<{ items: ModerationAuditEvent[] }>("/api/admin/moderation/audit", {
+    asUser: USERS.admin.clerkId,
+  });
+  assertStatus(audit, 200);
+  assert(
+    audit.json.items.some((event) =>
+      event.action === "user_trust_level_changed" &&
+      event.targetCode === USERS.ana.username &&
+      event.metadata.previousTrustLevel === "normal" &&
+      event.metadata.trustLevel === "trusted"
+    ),
+    "trust level changes should be audited",
+  );
+
+  const promoted = await api<{ ok: boolean }>(
+    `/api/admin/users/${USERS.ana.username}/trust-level`,
+    {
+      asUser: USERS.admin.clerkId,
+      body: { trustLevel: "admin", reason: "e2e promote" },
+    },
+  );
+  assertStatus(promoted, 200);
+
+  const promotedAccess = await api<{ items: Report[] }>("/api/admin/reports", {
+    asUser: USERS.ana.clerkId,
+  });
+  assertStatus(promotedAccess, 200);
+
+  const selfDemote = await api(`/api/admin/users/${USERS.ana.username}/trust-level`, {
+    asUser: USERS.ana.clerkId,
+    body: { trustLevel: "normal", reason: "e2e self demote" },
+  });
+  assertStatus(selfDemote, 400);
+
+  const demoted = await api<{ ok: boolean }>(
+    `/api/admin/users/${USERS.ana.username}/trust-level`,
+    {
+      asUser: USERS.admin.clerkId,
+      body: { trustLevel: "normal", reason: "e2e restore" },
+    },
+  );
+  assertStatus(demoted, 200);
+
+  const demotedAccess = await api("/api/admin/reports", { asUser: USERS.ana.clerkId });
+  assertStatus(demotedAccess, 403);
+});
+
 e2eTest("admin can filter reports, bulk resolve them, and leave moderation notes", async () => {
   const before = await api<{ items: Report[] }>("/api/admin/reports?status=all", {
     asUser: USERS.admin.clerkId,

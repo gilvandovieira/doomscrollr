@@ -20,6 +20,11 @@ export const ReactionValueSchema = z.union([z.literal(1), z.literal(-1)]);
 
 const TitleSchema = z.string().trim().min(TITLE_MIN_LENGTH).max(TITLE_MAX_LENGTH);
 
+// Text posts may omit the title; the server fills it from the body's first
+// sentence. Lenient here (no min) so an empty field is accepted — the route does
+// the deriving and enforces the final 3–180 length.
+const OptionalTitleSchema = z.string().trim().max(TITLE_MAX_LENGTH).optional();
+
 const TagsSchema = z
   .array(z.string().regex(TAG_SLUG_REGEX))
   .max(MAX_TAGS_PER_POST)
@@ -27,29 +32,37 @@ const TagsSchema = z
 
 // Create-post payloads, discriminated by kind (spec §12).
 export const CreatePostSchema = z.discriminatedUnion("postKind", [
-  z.object({
-    postKind: z.literal("text"),
-    title: TitleSchema,
-    bodyText: z.string().trim().min(1).max(POST_BODY_MAX_LENGTH),
-    tags: TagsSchema,
-  }),
-  z.object({
-    postKind: z.literal("external_image"),
-    title: TitleSchema,
-    imageUrl: z.string().url(),
-    tags: TagsSchema,
-  }),
-  z.object({
-    postKind: z.literal("youtube"),
-    title: TitleSchema,
-    youtubeUrl: z.string().url(),
-    tags: TagsSchema,
-  }),
+  z
+    .object({
+      postKind: z.literal("text"),
+      title: OptionalTitleSchema,
+      bodyText: z.string().trim().min(1).max(POST_BODY_MAX_LENGTH),
+      tags: TagsSchema,
+    })
+    .strict(),
+  z
+    .object({
+      postKind: z.literal("external_image"),
+      title: TitleSchema,
+      imageUrl: z.string().url(),
+      tags: TagsSchema,
+    })
+    .strict(),
+  z
+    .object({
+      postKind: z.literal("youtube"),
+      title: OptionalTitleSchema,
+      youtubeUrl: z.string().url(),
+      tags: TagsSchema,
+    })
+    .strict(),
 ]);
 
-export const CreateQuotePostSchema = z.object({
-  bodyText: z.string().trim().min(1).max(POST_BODY_MAX_LENGTH),
-});
+export const CreateQuotePostSchema = z
+  .object({
+    bodyText: z.string().trim().min(1).max(POST_BODY_MAX_LENGTH),
+  })
+  .strict();
 
 const EmbeddedPostSchema = z
   .object({

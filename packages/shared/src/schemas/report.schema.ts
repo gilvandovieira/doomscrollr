@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { REPORT_REASONS } from "../constants.ts";
-import { AuthorSchema, UserStatusSchema } from "./user.schema.ts";
+import { AuthorSchema, UserStatusSchema, UserTrustLevelSchema } from "./user.schema.ts";
 
 export const ReportReasonSchema = z.enum(REPORT_REASONS);
 export const ReportTargetTypeSchema = z.enum(["post", "comment", "user"]);
@@ -17,6 +17,7 @@ export const ModerationAuditActionSchema = z.enum([
   "report_actioned",
   "note_created",
   "user_status_changed",
+  "user_trust_level_changed",
 ]);
 
 // Targets are addressed by their public code / username, never internal ids (spec §6).
@@ -59,6 +60,13 @@ export const SetUserModerationStatusSchema = z
   })
   .strict();
 
+export const SetUserTrustLevelSchema = z
+  .object({
+    trustLevel: UserTrustLevelSchema,
+    reason: z.string().trim().max(1000).optional(),
+  })
+  .strict();
+
 export const ModerationNoteSchema = z
   .object({
     id: z.string().min(1),
@@ -92,6 +100,7 @@ export const ReportSchema = z
     targetType: ReportTargetTypeSchema,
     targetCode: z.string().min(1),
     targetUserStatus: UserStatusSchema.nullable(),
+    targetUserTrustLevel: UserTrustLevelSchema.nullable(),
     reason: ReportReasonSchema,
     details: z.string().nullable(),
     status: ReportStatusSchema,

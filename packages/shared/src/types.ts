@@ -38,6 +38,7 @@ import type {
   ReportStatusSchema,
   ReportTargetTypeSchema,
   SetUserModerationStatusSchema,
+  SetUserTrustLevelSchema,
 } from "./schemas/report.schema.ts";
 import type {
   AdminTagListResponseSchema,
@@ -57,10 +58,12 @@ import type {
   UserProfileSchema,
   UserRoleSchema,
   UserStatusSchema,
+  UserTrustLevelSchema,
 } from "./schemas/user.schema.ts";
 
 export type UserRole = z.infer<typeof UserRoleSchema>;
 export type UserStatus = z.infer<typeof UserStatusSchema>;
+export type UserTrustLevel = z.infer<typeof UserTrustLevelSchema>;
 export type Author = z.infer<typeof AuthorSchema>;
 export type UserProfile = z.infer<typeof UserProfileSchema>;
 export type SetUsernameInput = z.infer<typeof SetUsernameSchema>;
@@ -100,6 +103,7 @@ export type AdminReportListQuery = z.infer<typeof AdminReportListQuerySchema>;
 export type CreateModerationNoteInput = z.infer<typeof CreateModerationNoteSchema>;
 export type BulkReportActionInput = z.infer<typeof BulkReportActionSchema>;
 export type SetUserModerationStatusInput = z.infer<typeof SetUserModerationStatusSchema>;
+export type SetUserTrustLevelInput = z.infer<typeof SetUserTrustLevelSchema>;
 export type ModerationNote = z.infer<typeof ModerationNoteSchema>;
 export type ModerationAuditAction = z.infer<typeof ModerationAuditActionSchema>;
 export type ModerationAuditEvent = z.infer<typeof ModerationAuditEventSchema>;

@@ -4,6 +4,7 @@ import {
   BulkReportActionSchema,
   CreateModerationNoteSchema,
   SetUserModerationStatusSchema,
+  SetUserTrustLevelSchema,
 } from "@doomscrollr/shared/schemas/report.schema.ts";
 import {
   CreateAdminTagSchema,
@@ -48,6 +49,7 @@ import {
 import {
   getUserModerationTargetByUsername,
   setUserStatusByUsername,
+  setUserTrustLevelByUsername,
 } from "../repositories/users.repository.ts";
 
 export const adminRoutes = new Hono();
@@ -356,6 +358,40 @@ adminRoutes.post("/users/:username/status", async (c) => {
     targetCode: target.username,
     reason: input.reason ?? null,
     metadata: { previousStatus: targetBefore.status, status: target.status },
+  });
+
+  return c.json({ ok: true });
+});
+
+adminRoutes.post("/users/:username/trust-level", async (c) => {
+  const admin = getAuthUser(c);
+  const username = c.req.param("username").replace(/^@/, "").toLowerCase();
+  const input = parseOrThrow(SetUserTrustLevelSchema, await readJsonBody(c));
+  const targetBefore = await getUserModerationTargetByUsername(username);
+  if (!targetBefore) throw notFound("User not found.");
+  if (
+    targetBefore.id === admin.id &&
+    targetBefore.role === "admin" &&
+    input.trustLevel !== "admin"
+  ) {
+    throw badRequest("Admins cannot demote their own admin trust level.");
+  }
+
+  const target = await setUserTrustLevelByUsername(username, input.trustLevel);
+  if (!target) throw notFound("User not found.");
+  await recordModerationAuditEvent({
+    actorUserId: admin.id,
+    action: "user_trust_level_changed",
+    targetType: "user",
+    targetId: target.id,
+    targetCode: target.username,
+    reason: input.reason ?? null,
+    metadata: {
+      previousTrustLevel: targetBefore.trustLevel,
+      trustLevel: target.trustLevel,
+      previousRole: targetBefore.role,
+      role: target.role,
+    },
   });
 
   return c.json({ ok: true });

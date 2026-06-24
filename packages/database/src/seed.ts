@@ -49,11 +49,20 @@ function resolveTargetId(report: (typeof mockReports)[number]): string {
   return userIdByUsername.get(report.targetCode)!;
 }
 
+function trustLevelForUser(user: (typeof mockUsers)[number]): string {
+  if (user.role === "admin") return "admin";
+  if (user.status === "limited") return "limited";
+  return "normal";
+}
+
 try {
   await sql.begin(async (tx) => {
     for (const user of mockUsers) {
       await tx`
-        INSERT INTO users (id, clerk_user_id, username, display_name, avatar_url, role, status, created_at, updated_at)
+        INSERT INTO users (
+          id, clerk_user_id, username, display_name, avatar_url,
+          role, status, trust_level, created_at, updated_at
+        )
         VALUES (
           ${userIdByUsername.get(user.username)!},
           ${`clerk_mock_${user.username}`},
@@ -62,6 +71,7 @@ try {
           ${user.avatarUrl},
           ${user.role},
           ${user.status},
+          ${trustLevelForUser(user)},
           ${new Date(MOCK_EPOCH + user.createdAtHoursOffset * 86400000).toISOString()},
           now()
         )

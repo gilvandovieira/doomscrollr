@@ -17,8 +17,9 @@ export function PostCard({ post, index = 0 }: { post: FeedPost; index?: number }
   return (
     <article
       className={`feed-card post-card feed-card--enter ${
-        isReshare ? `post-card--reshare-kind post-card--${post.postKind}` : ""
+        isReshare ? "post-card--reshare-kind" : ""
       }`}
+      data-kind={post.postKind}
       style={enterStyle}
     >
       <div className="post-card__head">

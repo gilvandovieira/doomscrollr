@@ -3,6 +3,14 @@ import { USERNAME_REGEX } from "../constants.ts";
 
 export const UserRoleSchema = z.enum(["user", "admin"]);
 export const UserStatusSchema = z.enum(["active", "limited", "suspended", "banned"]);
+export const UserTrustLevelSchema = z.enum([
+  "new",
+  "normal",
+  "trusted",
+  "limited",
+  "moderator",
+  "admin",
+]);
 
 export const UsernameSchema = z
   .string()

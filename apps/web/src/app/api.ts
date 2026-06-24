@@ -48,6 +48,7 @@ import type {
   ReactionResult,
   Report,
   SetUserModerationStatusInput,
+  SetUserTrustLevelInput,
   Tag,
   TagDetailResponse,
   UserProfile,
@@ -424,6 +425,17 @@ export function setUserModerationStatus(
 ): Promise<void> {
   const handle = username.replace(/^@/, "");
   return authedFetch(`/api/admin/users/${handle}/status`, { body: input, getToken }).then(() =>
+    undefined
+  );
+}
+
+export function setUserTrustLevel(
+  username: string,
+  input: SetUserTrustLevelInput,
+  getToken: GetAuthToken,
+): Promise<void> {
+  const handle = username.replace(/^@/, "");
+  return authedFetch(`/api/admin/users/${handle}/trust-level`, { body: input, getToken }).then(() =>
     undefined
   );
 }

@@ -7,6 +7,7 @@ import type {
   ReportStatus,
   ReportTargetType,
   UserStatus,
+  UserTrustLevel,
 } from "@doomscrollr/shared/types.ts";
 import { alias } from "drizzle-orm/pg-core";
 import { and, desc, eq, inArray, type SQL, sql } from "drizzle-orm";
@@ -73,6 +74,7 @@ type AdminReportRow = {
   targetId: string;
   targetCode: string | null;
   targetUserStatus: UserStatus | null;
+  targetUserTrustLevel: UserTrustLevel | null;
   reason: string;
   details: string | null;
   status: ReportStatus;
@@ -92,6 +94,7 @@ function mapReportRows(rows: AdminReportRow[], notesByTarget: Map<string, Report
       targetType: row.targetType,
       targetCode: target.targetCode,
       targetUserStatus: row.targetUserStatus,
+      targetUserTrustLevel: row.targetUserTrustLevel,
       reason: row.reason as ReportReason,
       details: row.details,
       status: row.status,
@@ -119,6 +122,7 @@ async function reportRowsWithFilters(filters: SQL[]): Promise<AdminReportRow[]> 
         string | null
       >`coalesce(${posts.publicCode}, ${comments.publicCode}, ${targetUser.username})`,
       targetUserStatus: sql<UserStatus | null>`${targetUser.status}`,
+      targetUserTrustLevel: sql<UserTrustLevel | null>`${targetUser.trustLevel}`,
       reason: reports.reason,
       details: reports.details,
       status: reports.status,

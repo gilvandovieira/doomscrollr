@@ -1,5 +1,9 @@
 import { readServerEnv } from "@doomscrollr/config/env.ts";
-import { MAX_MENTIONS_PER_COMMENT } from "@doomscrollr/shared/constants.ts";
+import {
+  MAX_MENTIONS_PER_COMMENT,
+  TITLE_MAX_LENGTH,
+  TITLE_MIN_LENGTH,
+} from "@doomscrollr/shared/constants.ts";
 import { getMockCommentsForPost, getMockPostByCode } from "@doomscrollr/shared/mock-data.ts";
 import { CreateCommentSchema } from "@doomscrollr/shared/schemas/comment.schema.ts";
 import {
@@ -15,7 +19,7 @@ import { checkImageIsFetchable, validateExternalImageUrl } from "../lib/image-ur
 import { enforceRateLimit, RATE_LIMITS } from "../lib/rate-limit.ts";
 import { parseOrThrow, readJsonBody } from "../lib/validation.ts";
 import { getAuthUser, getOptionalViewerId, requireUser } from "../middleware/auth.ts";
-import { extractYouTubeId, isYouTubeShort } from "../services/youtube.service.ts";
+import { extractYouTubeId, fetchYouTubeTitle, isYouTubeShort } from "../services/youtube.service.ts";
 import { isBlocked } from "../repositories/blocks.repository.ts";
 import {
   createComment,
@@ -86,12 +90,13 @@ postsRoutes.post("/", requireUser, async (c) => {
   const fields: CreatePostFields = {
     authorId: user.id,
     postKind: data.postKind,
-    title: data.title,
+    title: "", // set per-kind below (text/youtube may derive it)
     tagIds: await resolveTagIds(data.tags),
   };
 
   if (data.postKind === "text") {
     fields.bodyText = data.bodyText;
+    fields.title = resolveTextTitle(data.title, data.bodyText);
   } else if (data.postKind === "external_image") {
     const structural = validateExternalImageUrl(data.imageUrl);
     if (!structural.ok) throw badRequest("That image URL is not allowed.");
@@ -99,12 +104,14 @@ postsRoutes.post("/", requireUser, async (c) => {
     const fetchable = await checkImageIsFetchable(data.imageUrl);
     if (!fetchable.ok) throw badRequest("That image could not be loaded as a supported image.");
     fields.imageUrl = data.imageUrl;
+    fields.title = data.title;
   } else {
     const videoId = extractYouTubeId(data.youtubeUrl);
     if (!videoId) throw badRequest("That YouTube URL is not supported.");
     fields.youtubeUrl = data.youtubeUrl;
     fields.youtubeVideoId = videoId;
     fields.youtubeIsShort = isYouTubeShort(data.youtubeUrl);
+    fields.title = await resolveYouTubeTitle(data.title, data.youtubeUrl);
   }
 
   const { publicCode } = await createPost(fields);
@@ -254,6 +261,45 @@ async function resolveReshareTarget(postCode: string, actorUserId: string) {
 function reshareTitle(title: string): string {
   const value = title.replace(/^(?:(?:Repost|Quote):\s*)+/i, "").trim() || title;
   return value.length <= 180 ? value : `${value.slice(0, 177)}...`;
+}
+
+// Text posts may skip the title; derive it from the body's first sentence (spec
+// §12). Returns a valid 3–180 char title, or rejects when the body is too short.
+function resolveTextTitle(title: string | undefined, body: string): string {
+  const provided = title?.trim() ?? "";
+  if (provided.length >= TITLE_MIN_LENGTH) return provided;
+
+  const derived = deriveTitleFromBody(body);
+  if (derived.length < TITLE_MIN_LENGTH) {
+    throw badRequest("Add a title — this post is too short to make one from.");
+  }
+  return derived;
+}
+
+function deriveTitleFromBody(body: string): string {
+  const firstLine = body.trim().split(/\r?\n/, 1)[0]?.trim() ?? "";
+  const sentenceEnd = firstLine.search(/[.!?…]/);
+  const phrase = (sentenceEnd >= 0 ? firstLine.slice(0, sentenceEnd + 1) : firstLine).trim();
+  const candidate = (phrase.length >= TITLE_MIN_LENGTH ? phrase : body.trim()).replace(/\s+/g, " ");
+  return candidate.length <= TITLE_MAX_LENGTH
+    ? candidate
+    : `${candidate.slice(0, TITLE_MAX_LENGTH - 1).trimEnd()}…`;
+}
+
+// YouTube posts may skip the title too; fall back to the video's own title via
+// oEmbed (the same source the client prefills from), then to a safe default so
+// the post can always be created without a manual title.
+async function resolveYouTubeTitle(title: string | undefined, url: string): Promise<string> {
+  const provided = title?.trim() ?? "";
+  if (provided.length >= TITLE_MIN_LENGTH) return provided;
+
+  const fetched = (await fetchYouTubeTitle(url))?.trim() ?? "";
+  if (fetched.length >= TITLE_MIN_LENGTH) {
+    return fetched.length <= TITLE_MAX_LENGTH
+      ? fetched
+      : `${fetched.slice(0, TITLE_MAX_LENGTH - 1).trimEnd()}…`;
+  }
+  return "Shared video";
 }
 
 async function createCommentNotifications(input: {

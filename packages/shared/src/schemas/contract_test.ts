@@ -2,7 +2,12 @@
 // providers that were removed from v1 (content ratings, ad eligibility, media
 // providers, internal ids, suggestive/mature surfaces).
 
-import { FeedPostSchema, PostKindSchema } from "./post.schema.ts";
+import {
+  CreatePostSchema,
+  CreateQuotePostSchema,
+  FeedPostSchema,
+  PostKindSchema,
+} from "./post.schema.ts";
 import { NotificationSchema } from "./notification.schema.ts";
 import { TagListResponseSchema } from "./tag.schema.ts";
 import { AuthorSchema } from "./user.schema.ts";
@@ -12,6 +17,12 @@ const EXCLUDED_KEYS = [
   "id",
   "contentRating",
   "content_rating",
+  "contentControls",
+  "isSuggestive",
+  "matureContent",
+  "nsfw",
+  "suggestive",
+  "suggestiveContent",
   "adEligibility",
   "media",
   "mediaAssetId",
@@ -47,6 +58,33 @@ Deno.test("FeedPostSchema rejects payloads carrying excluded fields", () => {
   const tainted = { ...base, contentRating: "mature" } as unknown;
   const result = FeedPostSchema.safeParse(tainted);
   assert(!result.success, "FeedPostSchema must reject excluded fields (strict).");
+});
+
+Deno.test("create post schemas reject suggestive and mature content fields", () => {
+  const textPost = {
+    postKind: "text",
+    bodyText: "Plain SFW post.",
+    tags: [],
+    suggestive: true,
+  };
+  const imagePost = {
+    postKind: "external_image",
+    title: "Plain linked image",
+    imageUrl: "https://example.com/image.png",
+    tags: [],
+    contentRating: "suggestive",
+  };
+  const quotePost = {
+    bodyText: "Quoting with a removed mature-content flag should fail.",
+    nsfw: false,
+  };
+
+  assert(!CreatePostSchema.safeParse(textPost).success, "Text posts must reject suggestive flags.");
+  assert(!CreatePostSchema.safeParse(imagePost).success, "Image posts must reject rating fields.");
+  assert(
+    !CreateQuotePostSchema.safeParse(quotePost).success,
+    "Quote posts must reject mature/suggestive fields.",
+  );
 });
 
 Deno.test("post kinds include v2 reshare kinds without adding media providers", () => {

@@ -21,6 +21,14 @@ import type { AnyPgColumn } from "drizzle-orm/pg-core";
 
 export const userRole = pgEnum("user_role", ["user", "admin"]);
 export const userStatus = pgEnum("user_status", ["active", "limited", "suspended", "banned"]);
+export const userTrustLevel = pgEnum("user_trust_level", [
+  "new",
+  "normal",
+  "trusted",
+  "limited",
+  "moderator",
+  "admin",
+]);
 export const postKind = pgEnum("post_kind", [
   "text",
   "external_image",
@@ -52,6 +60,7 @@ export const users = pgTable("users", {
   avatarUrl: text("avatar_url"),
   role: userRole("role").notNull().default("user"),
   status: userStatus("status").notNull().default("active"),
+  trustLevel: userTrustLevel("trust_level").notNull().default("new"),
   ...timestamps,
 }, (table) => [
   uniqueIndex("users_clerk_user_id_unique").on(table.clerkUserId),
@@ -232,7 +241,8 @@ export const moderationAuditEvents = pgTable("moderation_audit_events", {
       'report_dismissed',
       'report_actioned',
       'note_created',
-      'user_status_changed'
+      'user_status_changed',
+      'user_trust_level_changed'
     )`,
   ),
 ]);

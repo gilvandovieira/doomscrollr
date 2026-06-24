@@ -6,6 +6,7 @@ import type {
   ModerationAuditEvent,
   Report,
   UserStatus,
+  UserTrustLevel,
 } from "@doomscrollr/shared/types.ts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -32,6 +33,7 @@ import {
   fetchAdminTags,
   fetchModerationAudit,
   setUserModerationStatus,
+  setUserTrustLevel,
 } from "../../app/api.ts";
 
 type ReportFilters = AdminReportListQuery;
@@ -55,6 +57,15 @@ const USER_STATUS_OPTIONS: Array<{ value: UserStatus; label: string }> = [
   { value: "limited", label: "Limit" },
   { value: "suspended", label: "Suspend" },
   { value: "banned", label: "Ban" },
+];
+
+const USER_TRUST_LEVEL_OPTIONS: Array<{ value: UserTrustLevel; label: string }> = [
+  { value: "new", label: "New" },
+  { value: "normal", label: "Normal" },
+  { value: "trusted", label: "Trusted" },
+  { value: "limited", label: "Limited" },
+  { value: "moderator", label: "Moderator" },
+  { value: "admin", label: "Admin" },
 ];
 
 const dateFormatter = new Intl.DateTimeFormat(undefined, {
@@ -156,6 +167,19 @@ export function AdminReportsPage() {
       await refreshModeration();
     } catch (err) {
       setActionError(err instanceof ApiError ? err.message : "Could not update user status.");
+    }
+  }
+
+  async function updateUserTrustLevel(report: Report, trustLevel: UserTrustLevel) {
+    setActionError(null);
+    try {
+      await setUserTrustLevel(report.targetCode, {
+        trustLevel,
+        reason: "Changed from the report queue.",
+      }, getToken);
+      await refreshModeration();
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : "Could not update trust level.");
     }
   }
 
@@ -334,6 +358,7 @@ export function AdminReportsPage() {
                   onAction={run}
                   onNote={addNote}
                   onUserStatus={updateUserStatus}
+                  onUserTrustLevel={updateUserTrustLevel}
                 />
               ))}
             </div>
@@ -497,6 +522,7 @@ function ReportRow({
   onAction,
   onNote,
   onUserStatus,
+  onUserTrustLevel,
 }: {
   report: Report;
   selected: boolean;
@@ -504,6 +530,7 @@ function ReportRow({
   onAction: (path: string, body?: unknown) => void;
   onNote: (report: Report, bodyText: string) => Promise<void>;
   onUserStatus: (report: Report, status: UserStatus) => Promise<void>;
+  onUserTrustLevel: (report: Report, trustLevel: UserTrustLevel) => Promise<void>;
 }) {
   const [noteDraft, setNoteDraft] = useState("");
   const code = report.targetCode;
@@ -579,26 +606,50 @@ function ReportRow({
 
         {report.targetType === "user" && (
           <div className="admin-user-status">
-            <span>Current: {report.targetUserStatus ?? "unknown"}</span>
-            <div>
-              {USER_STATUS_OPTIONS.map((option) => (
-                <button
-                  key={option.value}
-                  type="button"
-                  className={option.value === "banned"
-                    ? "tool-button admin-danger-button"
-                    : "tool-button"}
-                  disabled={report.targetUserStatus === option.value}
-                  onClick={() => onUserStatus(report, option.value)}
-                >
-                  {option.value === "banned"
-                    ? <Ban size={16} aria-hidden="true" />
-                    : option.value === "active"
-                    ? <ShieldCheck size={16} aria-hidden="true" />
-                    : <ShieldAlert size={16} aria-hidden="true" />}
-                  {option.label}
-                </button>
-              ))}
+            <div className="admin-user-status__row">
+              <span>
+                Account status: <strong>{report.targetUserStatus ?? "unknown"}</strong>
+              </span>
+              <div className="admin-user-status__actions">
+                {USER_STATUS_OPTIONS.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    className={option.value === "banned"
+                      ? "tool-button admin-danger-button"
+                      : "tool-button"}
+                    disabled={report.targetUserStatus === option.value}
+                    onClick={() => onUserStatus(report, option.value)}
+                  >
+                    {option.value === "banned"
+                      ? <Ban size={16} aria-hidden="true" />
+                      : option.value === "active"
+                      ? <ShieldCheck size={16} aria-hidden="true" />
+                      : <ShieldAlert size={16} aria-hidden="true" />}
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="admin-user-status__row">
+              <span>
+                Trust level: <strong>{report.targetUserTrustLevel ?? "unknown"}</strong>
+              </span>
+              <div className="admin-user-status__actions">
+                {USER_TRUST_LEVEL_OPTIONS.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    className={trustLevelButtonClass(option.value)}
+                    disabled={report.targetUserTrustLevel === option.value}
+                    onClick={() => onUserTrustLevel(report, option.value)}
+                  >
+                    {trustLevelIcon(option.value)}
+                    {option.label}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         )}
@@ -720,6 +771,20 @@ function formatDate(value: string): string {
 
 function labelAuditAction(action: ModerationAuditEvent["action"]): string {
   return action.replace(/_/g, " ");
+}
+
+function trustLevelButtonClass(trustLevel: UserTrustLevel): string {
+  if (trustLevel === "limited") return "tool-button admin-danger-button";
+  if (trustLevel === "admin") return "tool-button bg-signal";
+  return "tool-button";
+}
+
+function trustLevelIcon(trustLevel: UserTrustLevel) {
+  if (trustLevel === "limited") return <ShieldAlert size={16} aria-hidden="true" />;
+  if (trustLevel === "admin" || trustLevel === "trusted" || trustLevel === "moderator") {
+    return <ShieldCheck size={16} aria-hidden="true" />;
+  }
+  return <ClipboardCheck size={16} aria-hidden="true" />;
 }
 
 function Shell({ message }: { message: string }) {

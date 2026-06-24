@@ -28,6 +28,15 @@
   --color-bruised: 56% 0.16 300; /* reserved */
   --color-pitch-ink: 19% 0.02 275; /* kept for back-compat */
 
+  /* Post-kind accent colors: one hue per type, spread around the wheel and kept
+     clear of the indigo brand accent. Used on the kind pill + the create tabs,
+     always with dark (pitch-ink) text for contrast in both themes. */
+  --kind-text: 64% 0.12 155; /* green */
+  --kind-image: 74% 0.14 70; /* amber */
+  --kind-youtube: 64% 0.18 25; /* red */
+  --kind-repost: 66% 0.13 232; /* cyan */
+  --kind-quote: 64% 0.16 300; /* violet */
+
   /* Derived */
   --line: oklch(var(--color-ink) / 0.1);
   --line-strong: oklch(var(--color-ink) / 0.16);
@@ -667,12 +676,18 @@ textarea:focus-visible,
     color: oklch(var(--color-signal));
   }
 
+  /* Colored type tag: a solid pill in the post's kind color (--kind), dark text
+     for contrast in both themes. The strongest at-a-glance cue for post type. */
   .post-card__kind {
     margin-left: auto;
     flex: 0 0 auto;
-    color: var(--muted);
-    font-size: 0.72rem;
-    font-weight: 600;
+    border-radius: 999px;
+    padding: 0.16rem 0.5rem;
+    background: oklch(var(--kind, var(--color-newsprint)));
+    color: oklch(var(--color-pitch-ink));
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
   }
 
   .post-card__link {
@@ -729,37 +744,66 @@ textarea:focus-visible,
   /* Reshares get their own surface shade so the feed reads at a glance: reposts
      lean cool (cyan), quotes lean violet, originals stay on the plain paper. The
      tint is a translucent overlay so it adapts to both light and dark themes. */
-  .post-card--repost {
-    background:
-      linear-gradient(oklch(var(--color-cyan) / 0.16), oklch(var(--color-cyan) / 0.16)),
-      oklch(var(--color-paper));
-    border-color: oklch(var(--color-cyan) / 0.5);
+  /* Map each post kind to its accent (--kind). Set on the card or create tab;
+     cascades to the kind pill and any kind-tinted surface. */
+  [data-kind="text"] {
+    --kind: var(--kind-text);
+  }
+  [data-kind="external_image"] {
+    --kind: var(--kind-image);
+  }
+  [data-kind="youtube"] {
+    --kind: var(--kind-youtube);
+  }
+  [data-kind="repost"] {
+    --kind: var(--kind-repost);
+  }
+  [data-kind="quote"] {
+    --kind: var(--kind-quote);
   }
 
-  .post-card--quote {
+  /* Reshares also carry a subtle surface shade in their kind color as a structural
+     cue, on top of the colored kind pill that every card gets. */
+  .post-card--reshare-kind {
     background:
-      linear-gradient(oklch(var(--color-bruised) / 0.16), oklch(var(--color-bruised) / 0.16)),
+      linear-gradient(oklch(var(--kind) / 0.1), oklch(var(--kind) / 0.1)),
       oklch(var(--color-paper));
-    border-color: oklch(var(--color-bruised) / 0.5);
+    border-color: oklch(var(--kind) / 0.42);
   }
 
-  /* The kind label becomes a solid colored pill so the type is unmistakable even
-     where the surface tint washes out (esp. dark mode): cyan = repost, violet =
-     quote. Dark text on both for legible contrast in either theme. */
-  .post-card--repost .post-card__kind,
-  .post-card--quote .post-card__kind {
+  /* Create tabs carry the same kind color: a dot when inactive (so all types show
+     their color), the full kind color when selected. */
+  .create-kind-tab::before {
+    content: "";
+    width: 0.5rem;
+    height: 0.5rem;
+    flex: 0 0 auto;
     border-radius: 999px;
-    padding: 0.18rem 0.55rem;
+    background: oklch(var(--kind));
+  }
+
+  .create-kind-tab[aria-pressed="true"] {
+    border-color: transparent;
+    background: oklch(var(--kind));
     color: oklch(var(--color-pitch-ink));
-    font-weight: 700;
   }
 
-  .post-card--repost .post-card__kind {
-    background: oklch(var(--color-cyan));
+  /* Keep the kind color on hover (more specific than .tool-button:hover, which
+     would otherwise repaint the bg to newsprint and hide the dark label). */
+  .create-kind-tab[aria-pressed="true"]:hover {
+    background: oklch(var(--kind));
+    color: oklch(var(--color-pitch-ink));
+    filter: brightness(1.05);
   }
 
-  .post-card--quote .post-card__kind {
-    background: oklch(var(--color-bruised));
+  /* Inactive tab hover: tint toward the kind color instead of plain newsprint.
+     The :not() raises specificity above .tool-button:hover (defined later). */
+  .create-kind-tab:not([aria-pressed="true"]):hover {
+    background: oklch(var(--kind) / 0.14);
+  }
+
+  .create-kind-tab[aria-pressed="true"]::before {
+    background: oklch(var(--color-pitch-ink) / 0.75);
   }
 
   .post-card__reshare {
@@ -1483,6 +1527,11 @@ textarea:focus-visible,
     font-weight: 800;
   }
 
+  .admin-user-status strong {
+    color: oklch(var(--color-ink));
+    text-transform: capitalize;
+  }
+
   .admin-error {
     border: 1px solid oklch(var(--color-oxide) / 0.36);
     border-radius: var(--radius-control);
@@ -1509,7 +1558,7 @@ textarea:focus-visible,
 
   .admin-bulk-bar__actions,
   .admin-report-actions,
-  .admin-user-status div {
+  .admin-user-status__actions {
     display: flex;
     flex-wrap: wrap;
     gap: 0.5rem;
@@ -1647,9 +1696,14 @@ textarea:focus-visible,
 
   .admin-user-status {
     display: grid;
-    gap: 0.5rem;
+    gap: 0.75rem;
     border-top: 1px solid var(--line);
     padding-top: 0.75rem;
+  }
+
+  .admin-user-status__row {
+    display: grid;
+    gap: 0.45rem;
   }
 
   .admin-report-actions {

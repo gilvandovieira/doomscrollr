@@ -224,6 +224,20 @@ e2eTest("youtube posts are accepted and expose the parsed video id", async () =>
   assertEquals(created.json.post.youtubeIsShort, true);
 });
 
+e2eTest("a youtube post with no title still posts with a derived title", async () => {
+  const created = await api<CreatePostResponse>("/api/posts", {
+    asUser: USERS.ren.clerkId,
+    body: { postKind: "youtube", youtubeUrl: "https://www.youtube.com/watch?v=dQw4w9WgXcQ" },
+  });
+  assertStatus(created, 201);
+  assertEquals(created.json.post.postKind, "youtube");
+  // Title comes from oEmbed when reachable, else a safe fallback — always valid.
+  assert(
+    created.json.post.title.trim().length >= 3,
+    `expected a derived title, got ${JSON.stringify(created.json.post.title)}`,
+  );
+});
+
 e2eTest("replies cannot be nested deeper than one level", async () => {
   // The seeded reply (lucas) is already one level deep; replying to it must 400.
   const res = await api(`/api/posts/${POSTS.fridayText.code}/comments`, {
@@ -231,4 +245,34 @@ e2eTest("replies cannot be nested deeper than one level", async () => {
     body: { bodyText: "Trying to nest a third level.", parentCommentCode: "c7Rn3Tb8Wx" },
   });
   assertStatus(res, 400);
+});
+
+e2eTest("a text post with no title takes its title from the body's first sentence", async () => {
+  const created = await api<CreatePostResponse>("/api/posts", {
+    asUser: USERS.maya.clerkId,
+    body: {
+      postKind: "text",
+      bodyText: "Friday deploys are a trap. Change my mind in the comments below.",
+      tags: [],
+    },
+  });
+  assertStatus(created, 201);
+  assertEquals(
+    created.json.post.title,
+    "Friday deploys are a trap.",
+    "title derived from the body's first sentence",
+  );
+  assertEquals(
+    created.json.post.bodyText,
+    "Friday deploys are a trap. Change my mind in the comments below.",
+    "body text is preserved",
+  );
+
+  // An explicit title still wins over the body.
+  const titled = await api<CreatePostResponse>("/api/posts", {
+    asUser: USERS.maya.clerkId,
+    body: { postKind: "text", title: "My own title", bodyText: "A different first line.", tags: [] },
+  });
+  assertStatus(titled, 201);
+  assertEquals(titled.json.post.title, "My own title", "an explicit title is kept as-is");
 });

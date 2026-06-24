@@ -8,6 +8,7 @@ export const MAX_FEED_LIMIT = 50;
 // Public codes use a URL-safe alphabet that avoids confusing characters (spec §7.2).
 export const PUBLIC_CODE_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 export const PUBLIC_CODE_LENGTH = 10;
+export const POST_SLUG_MAX_LENGTH = 80;
 
 // Usernames: 3-24 chars, lowercase letters, numbers, underscore (spec §6.3).
 export const USERNAME_REGEX = /^[a-z0-9_]{3,24}$/;
