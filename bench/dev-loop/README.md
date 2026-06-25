@@ -14,10 +14,33 @@ Real app, real traffic on `/api/feed/recent` (a live Postgres query), `VmRSS` re
 | external watcher → fresh `deno run` | ~1.0 s | **631 MB — flat** |
 | external watcher → `deno compile` + binary | ~2.2 s (compile-bound) | **~221 MB — flat** |
 
-**Conclusion:** `--watch` reuses the process and does not reclaim the previous module graph/isolate,
-so memory climbs every reload. A fresh process per reload is flat. The fix for a non-blowing-up dev
-loop is an external watcher (`watchexec`/`entr`) that **kills and respawns** instead of `--watch`.
-A shorter graceful-shutdown timeout fixes the reload *hang*, not this leak.
+**Conclusion:** `--watch` reuses the process and is slow to reclaim the previous module graph/isolate,
+so memory **ramps** across reloads. Long runs show it is **bounded** — it plateaus at an elevated,
+load-dependent steady-state (~550–650 MB in the container config) and oscillates, rather than growing
+without limit. A fresh process per reload is flat. The fix for a non-blowing-up dev loop is an
+external watcher (`watchexec`/`entr`) that **kills and respawns** instead of `--watch`. A shorter
+graceful-shutdown timeout fixes the reload *hang*, not this retention. (The reload loop under load is
+also CPU-bound, ~6 cores — see `container/README.md`.)
+
+This matches Deno issue **[#28107 "Memory leak with file watcher"]** (reported on 2.1.10 with an ML
+script; this is the same mechanism on 2.8.3 with an ordinary web app). External writeup:
+`../../DENO_TEAM_FEEDBACK.md`.
+
+### Where the retained memory lives (`disambig.sh`)
+
+Same `--watch` loop, 5 reloads under load, varying one knob each time:
+
+| Config | RSS series (MB) | Reads as |
+|---|---|---|
+| default | 630 → 3006 | baseline growth |
+| `MALLOC_ARENA_MAX=2` | 632 → 3054 | **not** glibc malloc-arena fragmentation |
+| `--v8-flags=--max-old-space-size=256` | 631 → 2985 | **not** V8 JS heap (climbs to ~3 GB past a 256 MB cap) |
+| `--v8-flags=--expose-gc` + forced `gc()` | 634 → 3167; post-GC 3180 | **not** lazy GC — forced GC doesn't drop it (true retention) |
+
+→ The retained bytes are **native, outside the JS heap, not arena fragmentation, not GC-reclaimable**
+— consistent with the previous run's isolate/module-graph not being freed until process exit.
+
+[#28107 "Memory leak with file watcher"]: https://github.com/denoland/deno/issues/28107
 
 ## Scripts
 
@@ -25,6 +48,7 @@ A shorter graceful-shutdown timeout fixes the reload *hang*, not this leak.
 |---|---|
 | `leak-confirm.sh` | Clean A/B: `--watch` RSS climb vs cold-respawn flat, under real 200 traffic. **Start here.** |
 | `reload-dx-real.sh` | Full 3-way: `--watch` vs cold-respawn vs `deno compile`+binary — latency, RSS, compile time |
+| `disambig.sh` | Localizes the retained memory: glibc-arena / V8 heap-cap / forced-GC probes |
 | `watch-theory.sh` | First A/B sketch (`--watch` vs external respawn) |
 | `mode-a-clean.sh` | `--watch`-only reload probe (default watch, triggers via a source touch) |
 | `load.ts` | closed-loop load generator (run with `bun`) — copy of `../load.ts` |

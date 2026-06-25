@@ -1,0 +1,31 @@
+# Self-contained reproduction of the `deno run --watch` reload memory retention.
+# One command:  docker compose -f bench/dev-loop/container/docker-compose.yml run --rm repro
+# Bundles its own Postgres, so it does not touch the host DB and a maintainer can run it anywhere.
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: doomscrollr
+      POSTGRES_USER: doomscrollr
+      POSTGRES_PASSWORD: doomscrollr
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U doomscrollr -d doomscrollr"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  repro:
+    build:
+      context: ../../..
+      dockerfile: bench/dev-loop/container/Dockerfile
+    mem_limit: 4g          # hard safety cap: a runaway --watch can't touch the host
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://doomscrollr:doomscrollr@db:5432/doomscrollr
+      APP_ENV: development
+      LOG_LEVEL: fatal
+      PUBLIC_BASE_URL: http://localhost:8094
+      WEB_ORIGIN: http://localhost:5173
+      N: "6"

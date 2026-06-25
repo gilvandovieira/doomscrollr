@@ -1,0 +1,433 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Deno Runtime & Watch-Mode Memory — Findings</title>
+<style>
+  :root{
+    --bg:#f4f4f2; --surface:#ffffff; --ink:#1a1a1e; --muted:#62626b; --faint:#8a8a93;
+    --line:#e4e4df; --accent:#4338ca; --accent-soft:#ece9fb;
+    --grow:#d4351f; --grow-soft:#fbe9e6; --flat:#16794a; --flat-soft:#e4f3ec;
+    --warn:#b45309;
+    --mono:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);
+    line-height:1.6;font-size:17px;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:920px;margin:0 auto;padding:0 24px}
+  a{color:var(--accent);text-decoration:none}
+  a:hover{text-decoration:underline}
+
+  header.hero{padding:72px 0 40px;border-bottom:1px solid var(--line)}
+  .kicker{font-family:var(--mono);font-size:12.5px;letter-spacing:.08em;color:var(--accent);
+    text-transform:uppercase;margin:0 0 18px}
+  h1{font-size:clamp(2rem,5vw,3.2rem);line-height:1.05;letter-spacing:-.025em;margin:0 0 18px;
+    font-weight:680;text-wrap:balance;max-width:18ch}
+  .thesis{font-size:clamp(1.05rem,2.2vw,1.35rem);color:var(--ink);max-width:60ch;margin:0;
+    line-height:1.45;text-wrap:pretty}
+  .thesis b{color:var(--grow);font-weight:650}
+  .meta{margin-top:28px;font-family:var(--mono);font-size:13px;color:var(--muted);
+    display:flex;flex-wrap:wrap;gap:8px 22px}
+
+  section{padding:56px 0;border-bottom:1px solid var(--line)}
+  h2{font-size:clamp(1.4rem,3vw,2rem);letter-spacing:-.02em;margin:0 0 6px;font-weight:660;text-wrap:balance}
+  h2 .num{font-family:var(--mono);font-size:.62em;color:var(--accent);font-weight:600;margin-right:12px;
+    vertical-align:.08em}
+  .lead{color:var(--muted);max-width:66ch;margin:0 0 28px;font-size:1.02rem}
+  h3{font-size:1.05rem;letter-spacing:-.01em;margin:34px 0 10px;font-weight:640}
+  p{max-width:70ch}
+  strong{font-weight:640}
+
+  /* TL;DR cards */
+  .tldr{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px;margin:8px 0 0}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:18px 18px 16px}
+  .card .tag{font-family:var(--mono);font-size:11.5px;letter-spacing:.04em;text-transform:uppercase;
+    color:var(--faint);margin:0 0 8px}
+  .card p{margin:0;font-size:.95rem;line-height:1.5;max-width:none}
+  .card.good{border-color:#cfe7da;background:linear-gradient(0deg,var(--flat-soft),var(--surface) 60%)}
+  .card.bad{border-color:#eccfca;background:linear-gradient(0deg,var(--grow-soft),var(--surface) 60%)}
+
+  /* tables */
+  table{width:100%;border-collapse:collapse;margin:18px 0;font-size:.92rem}
+  th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line)}
+  thead th{font-size:12px;letter-spacing:.03em;text-transform:uppercase;color:var(--muted);font-weight:600}
+  td.n,th.n{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums}
+  tbody tr:hover{background:#fafafa}
+  .mono{font-family:var(--mono)}
+  .pill{display:inline-block;font-family:var(--mono);font-size:11.5px;padding:1px 7px;border-radius:999px;
+    font-weight:600}
+  .pill.grow{background:var(--grow-soft);color:var(--grow)}
+  .pill.flat{background:var(--flat-soft);color:var(--flat)}
+
+  /* bar charts */
+  .chart{margin:24px 0 8px;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:22px 22px 14px}
+  .chart h4{margin:0 0 4px;font-size:1rem;font-weight:640}
+  .chart .sub{margin:0 0 18px;color:var(--muted);font-size:.85rem;font-family:var(--mono)}
+  .row{display:grid;grid-template-columns:148px 1fr;align-items:center;gap:14px;margin:9px 0}
+  .row .lab{font-family:var(--mono);font-size:12.5px;color:var(--ink);text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .track{position:relative;background:#f0f0ee;border-radius:7px;height:26px;overflow:hidden}
+  .fill{height:100%;border-radius:7px;display:flex;align-items:center;justify-content:flex-end;
+    padding-right:9px;color:#fff;font-family:var(--mono);font-size:12px;font-weight:600;min-width:42px;
+    transition:width .3s ease-out}
+  .fill.g{background:linear-gradient(90deg,#e0593f,var(--grow))}
+  .fill.f{background:linear-gradient(90deg,#27a06a,var(--flat))}
+  .fill.b{background:linear-gradient(90deg,#5b50d6,var(--accent))}
+  .fill.lab-out{color:var(--ink);justify-content:flex-start;padding-left:9px;background:none}
+
+  /* callouts + code */
+  .callout{border:1px solid var(--line);border-radius:12px;padding:16px 18px;margin:22px 0;
+    background:var(--surface);font-size:.95rem}
+  .callout.key{border-color:#cdc7f0;background:linear-gradient(0deg,var(--accent-soft),var(--surface) 70%)}
+  .callout .h{font-weight:660;margin:0 0 4px;display:flex;align-items:center;gap:8px}
+  pre{background:#1c1c22;color:#e8e8ec;border-radius:12px;padding:16px 18px;overflow-x:auto;
+    font-family:var(--mono);font-size:13px;line-height:1.55;margin:18px 0}
+  pre .c{color:#7d8590}
+  code{font-family:var(--mono);font-size:.86em;background:#ececea;border-radius:5px;padding:1px 5px}
+  pre code{background:none;padding:0;font-size:inherit}
+
+  ul.clean{list-style:none;padding:0;margin:14px 0;max-width:72ch}
+  ul.clean li{padding:6px 0 6px 26px;position:relative;border-bottom:1px solid var(--line)}
+  ul.clean li:last-child{border-bottom:0}
+  ul.clean li::before{content:"›";position:absolute;left:6px;color:var(--accent);font-weight:700}
+
+  footer{padding:48px 0 80px;color:var(--muted);font-size:.88rem}
+  footer h2{font-size:1.1rem;color:var(--ink)}
+  .small{font-size:.82rem;color:var(--faint)}
+  @media (max-width:560px){
+    .row{grid-template-columns:96px 1fr;gap:10px}
+    body{font-size:16px}
+  }
+  @media (prefers-color-scheme:dark){
+    :root{--bg:#15151a;--surface:#1d1d23;--ink:#ececef;--muted:#a0a0aa;--faint:#75757f;
+      --line:#2c2c34;--accent:#a99cff;--accent-soft:#262138;--grow:#ff7a63;--grow-soft:#33201c;
+      --flat:#54d099;--flat-soft:#16291f;}
+    .track{background:#26262d}.fill.lab-out{color:var(--ink)}
+    tbody tr:hover{background:#22222a}code{background:#2a2a32}
+    .card.good{background:linear-gradient(0deg,var(--flat-soft),var(--surface) 60%);border-color:#234435}
+    .card.bad{background:linear-gradient(0deg,var(--grow-soft),var(--surface) 60%);border-color:#46291f}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <p class="kicker">Memory investigation · Deno 2.8.3</p>
+  <h1>The leak that was three different things.</h1>
+  <p class="thesis">An API that “locked up the laptop at 3&nbsp;GB” turned out to be three separate
+  problems. Two were operational. The real runtime bug: <b>`deno run --watch` retains far more memory
+  for `npm:` modules than for JSR across reloads</b> — proven by the same library through two loaders.</p>
+  <div class="meta">
+    <span>2026-06-24</span><span>i7-12700H · 15 GiB · Linux 7.0.12</span>
+    <span>Deno 2.8.3 · Node 26.1 · Bun 1.3.14</span><span>Hono + Drizzle + postgres.js app</span>
+  </div>
+</header>
+
+<section>
+  <h2><span class="num">00</span>The short version</h2>
+  <div class="tldr">
+    <div class="card">
+      <p class="tag">The “3 GB leak”</p>
+      <p>Not a code leak — <strong>concurrent dev servers stacking</strong> (agents + an orphaned test server), each 0.6–2 GB. Fixed a SIGTERM handler that wedged on shutdown.</p>
+    </div>
+    <div class="card good">
+      <p class="tag">Production memory</p>
+      <p><code>deno compile</code> takes the API from <strong>641 → 226 MB</strong>, zero code change — ≈ Node, &lt; ¼ of <code>deno run</code>.</p>
+    </div>
+    <div class="card bad">
+      <p class="tag">The real runtime bug</p>
+      <p><code>--watch</code> retains far more for <strong>npm:</strong> than JSR — same Hono library: <strong>+19</strong> vs <strong>+2</strong> MB/reload through the two loaders.</p>
+    </div>
+    <div class="card good">
+      <p class="tag">The fix</p>
+      <p><strong>Dev:</strong> external watcher (kill + respawn) or compile. <strong>Prod:</strong> ship the compiled binary.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2><span class="num">01</span>Production runtime memory</h2>
+  <p class="lead">Same unmodified app, live Postgres, warm RSS. The runtime — not the app — dominates
+  the footprint: the app’s intrinsic working set is only ~27 MB.</p>
+  <div class="chart">
+    <h4>Warm resident memory (MB) — lower is better</h4>
+    <p class="sub">same app · 4-core budget · /ready = db ok</p>
+    <div class="row"><div class="lab">deno run</div><div class="track"><div class="fill g" style="width:100%">641</div></div></div>
+    <div class="row"><div class="lab">deno compile</div><div class="track"><div class="fill b" style="width:35.3%">226</div></div></div>
+    <div class="row"><div class="lab">Node 26</div><div class="track"><div class="fill b" style="width:32.1%">206</div></div></div>
+    <div class="row"><div class="lab">Bun 1.3</div><div class="track"><div class="fill f" style="width:15.6%">100</div></div></div>
+  </div>
+  <p><code>deno compile</code> reclaims most of the <code>deno run</code> overhead with no code change,
+  so the bulk of it is a dev/JIT cost (startup transpilation + retained module graph), not a hard
+  runtime floor. Bun is lightest; Node ties compiled Deno and is the only <em>managed</em> Lambda
+  runtime (parity). On a real DB workload, throughput is roughly a wash — memory and cold start are
+  the differentiators.</p>
+
+  <h3>Warm memory &amp; startup — does the <code>npm:</code> tax hit production too?</h3>
+  <p>Now that we know the cause is the <code>npm:</code>/Node-compat loader (§03), does it inflate the
+  steady-state baseline as well? Mostly it shows up as a <strong>startup spike</strong>, not warm RSS.
+  Plain <code>deno run</code>, warmed, npm vs comparable JSR:</p>
+  <table>
+    <thead><tr><th>Stack</th><th class="n">warm RSS</th><th class="n">startup peak</th></tr></thead>
+    <tbody>
+      <tr><td><code>npm:hono</code></td><td class="n">62 MB</td><td class="n">78 MB</td></tr>
+      <tr><td><code>jsr:@hono/hono</code></td><td class="n">61 MB</td><td class="n">62 MB</td></tr>
+      <tr><td>npm full (6 deps)</td><td class="n">~109 MB</td><td class="n">866 MB</td></tr>
+      <tr><td>jsr full (oak + std/log + pg)</td><td class="n">81 MB</td><td class="n">82 MB</td></tr>
+    </tbody>
+  </table>
+  <div class="chart">
+    <h4>Startup peak memory (MB) — full stack, npm vs JSR</h4>
+    <p class="sub">node-compat transpile/load spike · scaled to 866</p>
+    <div class="row"><div class="lab">npm full</div><div class="track"><div class="fill g" style="width:100%">866</div></div></div>
+    <div class="row"><div class="lab">jsr full</div><div class="track"><div class="fill f" style="width:9.5%">82</div></div></div>
+  </div>
+  <p>Same-library warm RSS is ~identical (62 vs 61) — npm-compat barely touches the <em>resting</em>
+  baseline. A full JSR stack is ~26% lighter warm (81 vs ~109 MB) and avoids the <strong>866 MB
+  node-compat startup spike</strong>. So the npm-compat costs land on <strong>startup peak</strong> and
+  <code>--watch</code> <strong>reload retention</strong> — not steady-state, which is also why
+  <code>deno compile</code> (no retained transpile spike) cut the app 641→226 MB.</p>
+
+  <div class="callout key">
+    <p class="h">→ Shipped</p>
+    <p><code>apps/api/Dockerfile</code> now builds a <code>deno compile</code> binary in a multi-stage
+    image (≈177 MiB idle in-container). Note: the binary is glibc-only — Alpine/musl can’t run it;
+    use <code>distroless/cc</code> if you want a smaller base.</p>
+  </div>
+</section>
+
+<section>
+  <h2><span class="num">02</span>The <code>--watch</code> reload retention</h2>
+  <p class="lead">A single <code>deno run --watch</code> dev server grows memory on every save —
+  <strong>linearly</strong>. On a roomy host it does <em>not</em> plateau: a dead-straight ramp from
+  143 MB to 2.7 GB over 41 saves, slope unchanged end to end (+65 → +63 MB/save).</p>
+  <table>
+    <thead><tr><th>Dev loop</th><th class="n">Per save</th><th>Across a session</th></tr></thead>
+    <tbody>
+      <tr><td><code>deno run --watch</code>, Drizzle (heavy npm)</td><td class="n">+530 MB</td><td><span class="pill grow">→ OOM</span> 226→3,411 MB in 6 saves</td></tr>
+      <tr><td><code>deno run --watch</code>, Clerk-floor (minimal npm)</td><td class="n">+64 MB</td><td><span class="pill grow">→ OOM</span> 143→2,740 MB over 41 saves, linear (no plateau)</td></tr>
+      <tr><td><code>watchexec -r</code> → fresh <code>deno run</code> (minimal npm)</td><td class="n">~0</td><td><span class="pill flat">flat</span> ~147 MB indefinitely (18 saves, spread 12)</td></tr>
+      <tr><td><code>watchexec -r</code> → fresh <code>deno run</code> (heavy npm)</td><td class="n">~0</td><td><span class="pill flat">flat</span> ~340 MB indefinitely</td></tr>
+      <tr><td><code>watchexec -r</code> → <code>deno compile</code> binary</td><td class="n">~0</td><td><span class="pill flat">flat</span> ~221 MB</td></tr>
+    </tbody>
+  </table>
+  <p>A <strong>fresh process per reload is flat</strong> — proven with real <code>watchexec -r</code>
+  (§06; respawn ~200 ms). Reclamation is <em>deferred</em>, not absent: a point-in-time <code>gc()</code>
+  of the live isolate doesn’t drop it (it can’t touch a prior run’s retained isolate), and on a host with
+  free RAM nothing forces the runtime to reclaim — so it climbs until OOM. <strong>The ~600 MB
+  “plateau” we saw earlier only appears under memory pressure</strong> — inside a capped container, where
+  cgroup pressure triggers reclamation. Under concurrent load the loop is also <strong>CPU-bound</strong>
+  (~6 of 20 cores).</p>
+</section>
+
+<section>
+  <h2><span class="num">03</span>Root cause — the <code>npm:</code> loader, not the watcher</h2>
+  <p class="lead">The decisive control: the <strong>same library through two loaders</strong>. Hono
+  from <code>npm:hono</code> retains ~+19 MB/reload; from <code>jsr:@hono/hono</code> — identical
+  code — ~+2 MB. Only the <code>npm:</code>/Node-compat resolution path differs.</p>
+
+  <div class="chart">
+    <h4>Same library (Hono), two resolution paths — MB retained per reload</h4>
+    <p class="sub">identical code · only the loader differs · ×2 stable · no load</p>
+    <div class="row"><div class="lab">npm:hono</div><div class="track"><div class="fill g" style="width:100%">+19</div></div></div>
+    <div class="row"><div class="lab">jsr:@hono/hono</div><div class="track"><div class="fill f" style="width:10.5%">+2</div></div></div>
+  </div>
+  <p>That isolates it from the library, its byte size, and its module count — <code>jsr:@hono/hono</code>
+  actually pulls <em>more</em> modules. What’s left is the <code>npm:</code>/Node-compat loader.</p>
+
+  <h3>And it’s not graph size — the confound is reversed</h3>
+  <p>Across comparable server shapes (no load, restarts verified, ×3 stable): if size drove it the
+  biggest graph would be worst — instead the smallest npm graph is.</p>
+  <table>
+    <thead><tr><th>Config</th><th class="n">modules</th><th class="n">retention/reload</th><th>kind</th></tr></thead>
+    <tbody>
+      <tr><td>npm: hono</td><td class="n">5</td><td class="n">~+19 MB</td><td><span class="pill grow">npm</span></td></tr>
+      <tr><td>npm: 6 deps</td><td class="n">10</td><td class="n">~+549 MB</td><td><span class="pill grow">npm</span></td></tr>
+      <tr><td>jsr: oak</td><td class="n">146</td><td class="n">~+5 MB</td><td><span class="pill flat">jsr</span></td></tr>
+      <tr><td>jsr: full</td><td class="n">198</td><td class="n">~+6 MB</td><td><span class="pill flat">jsr</span></td></tr>
+      <tr><td>jsr: heavy</td><td class="n">327</td><td class="n">~+7 MB</td><td><span class="pill flat">jsr</span></td></tr>
+    </tbody>
+  </table>
+  <div class="callout key">
+    <p class="h">→ Conclusion</p>
+    <p>The retained RSS appears tied to the <strong>npm/Node-compat module path not being released on
+    <code>--watch</code> restart</strong> — native, not V8 old-space (a 256 MB heap cap doesn’t bound it
+    → code-space is the suspect), not glibc-arena. It reproduces in the official
+    <code>denoland/deno:2.8.3</code> image (stock glibc), so it isn’t our distro. (Mechanism inferred;
+    the <code>npm:</code> ≫ <code>jsr:</code> difference is directly measured.)</p>
+  </div>
+  <p>This matches <a href="https://github.com/denoland/deno/issues/28107">Deno&nbsp;#28107</a> (closed):
+  its repro loads <code>@huggingface/transformers</code> — an npm package — and reaches tens of GB. The
+  ceiling we saw varied by <em>environment</em> (a container reclaimed to ~600 MB; the host kept
+  climbing to ~3.9 GB), not by footprint — so “bigger npm footprint → higher ceiling” is only a
+  qualitative hypothesis for why an ML run reaches that scale.</p>
+</section>
+
+<section>
+  <h2><span class="num">04</span>Real app, real DB — the maximal JSR swap</h2>
+  <p class="lead">Matched feed servers, the same seeded Postgres, the same recent-feed query —
+  npm (Drizzle) vs JSR (raw <code>@db/postgres</code>). Clerk stays npm in both (no JSR equivalent —
+  the irreducible floor). This is §03 confirmed on a working app with real connections.</p>
+  <table>
+    <thead><tr><th>Metric (real DB)</th><th class="n">npm stack</th><th class="n">JSR stack</th><th class="n">Δ</th></tr></thead>
+    <tbody>
+      <tr><td>Warm RSS</td><td class="n">496 MB</td><td class="n">152 MB</td><td class="n">3.3× less</td></tr>
+      <tr><td>Startup peak</td><td class="n">499 MB</td><td class="n">157 MB</td><td class="n">3.2× less</td></tr>
+      <tr><td>RSS under load</td><td class="n">799 MB</td><td class="n">220 MB</td><td class="n">3.6× less</td></tr>
+      <tr><td>Cold start</td><td class="n">120 ms</td><td class="n">88 ms</td><td class="n">1.4× faster</td></tr>
+      <tr><td><code>/feed</code> throughput</td><td class="n">2,745 rps</td><td class="n">2,531 rps</td><td class="n">~equal</td></tr>
+      <tr><td><code>--watch</code> retention</td><td class="n">+552 MB/reload</td><td class="n">+64 MB/reload</td><td class="n">8.6× less</td></tr>
+    </tbody>
+  </table>
+  <div class="chart">
+    <h4>--watch reload retention (MB/reload) — real app, real DB</h4>
+    <p class="sub">npm via Drizzle vs JSR via raw @db/postgres · Clerk floor in both</p>
+    <div class="row"><div class="lab">npm</div><div class="track"><div class="fill g" style="width:100%">+552</div></div></div>
+    <div class="row"><div class="lab">jsr</div><div class="track"><div class="fill f" style="width:11.6%">+64</div></div></div>
+  </div>
+  <div class="callout key">
+    <p class="h">→ The decomposition that explains it</p>
+    <p>Each npm dep alone on a JSR base: <strong>Drizzle +462</strong>, <strong>Clerk +62</strong>,
+    Hono +19, Pino +4, <code>postgres.js</code> +2 MB/reload. <strong>Drizzle is ~84% of the cost</strong>
+    — and it's npm-only, so replacing it with raw SQL is the one move that matters. <strong>Clerk is the
+    floor</strong> (+62, no JSR): the JSR app still climbs ~64 MB/reload, just ~9× slower (3 GB in
+    ~45 reloads vs ~6). <code>postgres.js</code> itself is free — the DB <em>driver</em> isn't the
+    problem; Drizzle's ORM graph through node-compat is.</p>
+  </div>
+  <p>Throughput is a wash (the DB query dominates), so the swap is pure upside on memory and startup —
+  at the cost of Drizzle's query builder and an unavoidable Clerk floor.</p>
+  <div class="callout">
+    <p class="h">→ You don’t have to give up the ORM feel — Kysely lands on the floor too</p>
+    <p>The realistic replacement for Drizzle isn’t raw SQL, it’s <strong>Kysely</strong> — a pure-ESM,
+    zero-runtime-dep typed query builder, used as a compiler over the same <code>@db/postgres</code>. It
+    keeps compile-time type-safety and still sits on the JSR floor: <strong>152 MB warm, +64 MB/save</strong>
+    — identical to raw SQL (+63), ~8× under Drizzle. It adds only ~+1 MB/save over the Clerk floor because
+    almost nothing goes through node-compat (zero runtime deps is why), and it doesn’t even need a JSR
+    publish — <code>npm:kysely</code> is already this clean through the compat loader.</p>
+  </div>
+</section>
+
+<section>
+  <h2><span class="num">05</span>Does <code>deno compile</code> help the JSR stack too?</h2>
+  <p class="lead">It rescued the npm app (641→226). On the JSR stack it does the <em>opposite</em> — the
+  compiled binary has a fixed ~234 MB floor (embedded runtime + V8 snapshot), and JSR
+  <code>deno run</code> already sits below it. Same matched servers, same DB, back-to-back.</p>
+  <table>
+    <thead><tr><th>Stack</th><th class="n">run warm</th><th class="n">run peak</th><th class="n">compile warm</th><th class="n">compile peak</th><th class="n">binary</th></tr></thead>
+    <tbody>
+      <tr><td>JSR (@hono/hono + @db/postgres + std/log + zod)</td><td class="n">153 MB</td><td class="n">156 MB</td><td class="n">234 MB</td><td class="n">301 MB</td><td class="n">226 MB</td></tr>
+      <tr><td>npm (hono + drizzle + postgres.js + pino + zod)</td><td class="n">639 MB</td><td class="n">698 MB</td><td class="n">235 MB</td><td class="n">296 MB</td><td class="n">223 MB</td></tr>
+    </tbody>
+  </table>
+  <div class="chart">
+    <h4>Warm RSS (MB) — <code>run</code> vs <code>compile</code>, both stacks · lower is better</h4>
+    <p class="sub">both binaries converge to a ~234 MB floor · Clerk floor in both</p>
+    <div class="row"><div class="lab">JSR · deno run</div><div class="track"><div class="fill f" style="width:24%">153</div></div></div>
+    <div class="row"><div class="lab">JSR · compile</div><div class="track"><div class="fill b" style="width:36.6%">234</div></div></div>
+    <div class="row"><div class="lab">npm · deno run</div><div class="track"><div class="fill g" style="width:100%">639</div></div></div>
+    <div class="row"><div class="lab">npm · compile</div><div class="track"><div class="fill b" style="width:36.8%">235</div></div></div>
+  </div>
+  <div class="callout key">
+    <p class="h">→ The two low-memory paths are alternatives, not additive</p>
+    <p>Compile only strips <code>deno run</code>'s npm-compat overhead — a <strong>2.7× win for npm</strong>
+    (639→235) but a <strong>1.5× loss for JSR</strong> (153→234), whose run already sits under the binary
+    floor (the two binaries agree at ~234, cross-validating). The lightest config of everything measured is
+    <strong>JSR + plain <code>deno run</code>, 153 MB</strong> — below both binaries. So: stay on
+    npm/Drizzle → <code>deno compile</code>; go maximalist JSR → just <code>deno run</code>, <em>don't</em>
+    compile. For the JSR stack, compile is a packaging tool (self-contained binary), not a memory tool.</p>
+  </div>
+  <p class="small">npm <code>deno run</code> warm is core-pinning/warm-up sensitive (639 here vs 496 in §04's
+  matched run); JSR 153 and the ~234 compiled floor are stable. Repro:
+  <code>bench/jsr-bench/compile-compare.sh</code>.</p>
+</section>
+
+<section>
+  <h2><span class="num">06</span>Why it explodes with coding agents</h2>
+  <p class="lead">This is the scenario that started the investigation. The reload retention compounds
+  with process multiplication: each <code>--watch</code> server self-inflates on every save, <em>and</em>
+  multiple agents each run their own server. N agents editing = N processes each ramping linearly.</p>
+  <p>One agent hammering saves drives a single server up the +64-to-530 MB/save ramp. Three agents
+  editing three servers → three processes each climbing toward 2–3 GB → 6–9 GB and a locked-up laptop,
+  fast. An <em>idle</em> watch server is harmless — no saves, no ramp; agents are the opposite of idle.
+  And it takes only <strong>one</strong> <code>npm:</code> dependency: Drizzle alone explodes in ~6 saves;
+  even the lone Clerk floor climbs linearly to OOM. It’s the node-compat loader path, not the library —
+  the same Hono retains +19 via <code>npm:</code> but +2 via <code>jsr:</code>.</p>
+  <h3>The fix is a 2×2 — the external watcher kills the ramp, minimal npm lowers the baseline</h3>
+  <table>
+    <thead><tr><th>RSS per save →</th><th class="n"><code>deno run --watch</code></th><th class="n"><code>watchexec -r</code> (fresh process)</th></tr></thead>
+    <tbody>
+      <tr><td>heavy npm — Drizzle</td><td class="n"><span class="pill grow">+530 → OOM in ~6</span></td><td class="n"><span class="pill flat">flat ~340 MB</span></td></tr>
+      <tr><td>minimal npm — raw SQL</td><td class="n"><span class="pill grow">+64 → OOM in ~41</span></td><td class="n"><span class="pill flat">flat ~147 MB</span></td></tr>
+      <tr><td>minimal npm — <strong>Kysely</strong> (ORM feel)</td><td class="n"><span class="pill grow">+64 → OOM in ~41</span></td><td class="n"><span class="pill flat">flat ~148 MB</span></td></tr>
+    </tbody>
+  </table>
+  <p>Verified with real <code>watchexec -r</code> over 18 saves: a fresh <code>deno run</code> per change
+  (~200 ms cold start) never stacks — the previous run’s npm-compat layer dies with the process. The two
+  axes are independent and additive: <strong>the external watcher flattens the ramp</strong> (every row
+  goes flat), <strong>minimal npm lowers the baseline</strong> (147 vs 340 MB), and <strong>Kysely keeps
+  the ORM ergonomics for free</strong> (148 MB, identical to raw SQL). The only configs that are actually
+  safe are a fresh process per reload, zero npm deps (pure JSR), or memory pressure that forces
+  reclamation (a capped container). Get Clerk onto JSR and even <code>--watch</code> becomes safe.</p>
+</section>
+
+<section>
+  <h2><span class="num">07</span>What to do</h2>
+  <table>
+    <thead><tr><th>Context</th><th>Use</th><th>Why</th></tr></thead>
+    <tbody>
+      <tr><td>Dev loop</td><td><strong>external watcher</strong> (<code>watchexec -r</code> / <code>entr</code>) → fresh <code>deno run</code></td><td>flat memory, verified (§06): a fresh process per save never stacks the npm-compat layer</td></tr>
+      <tr><td>DB layer (keep types, cut memory)</td><td><strong>Kysely</strong> over <code>@db/postgres</code> (not Drizzle)</td><td>3.5× lighter warm, +64 vs +530 MB/save; type-safe, no JSR publish needed</td></tr>
+      <tr><td>Production (container)</td><td><strong><code>deno compile</code> binary</strong></td><td>641→226 MB, zero code change, no migration; stay on Deno</td></tr>
+      <tr><td>Production (Lambda, native runtime)</td><td><strong>Node</strong></td><td>only managed Lambda runtime → dev/prod parity; ≈ compiled-Deno memory</td></tr>
+      <tr><td>Minimum footprint (container)</td><td><strong>Bun</strong></td><td>100 MB; but full rewrite + no Lambda-native</td></tr>
+    </tbody>
+  </table>
+  <p>A full JSR rewrite would sidestep the watch bug, but Clerk/Drizzle have no JSR equivalents — so
+  for this app the external-watcher dev loop is the practical fix. And if you <em>did</em> go JSR you'd
+  run it, not compile it (§05): JSR + <code>deno run</code> is ~153 MB, below the compiled binary. The
+  runtime decision is otherwise driven by deploy target, not the benchmark.</p>
+</section>
+
+<section>
+  <h2><span class="num">08</span>Reproduce it</h2>
+  <p class="lead">Everything is in <code>bench/</code>. The npm-vs-JSR control runs in ~2 minutes.</p>
+<pre><span class="c"># the decisive control: npm vs jsr --watch retention (verified restarts, RSS-guarded)</span>
+REPS=3 bench/dev-loop/npm-vs-jsr/run.sh
+
+<span class="c"># one-command containerized repro (official denoland/deno image + bundled Postgres, stock glibc)</span>
+docker compose -f bench/dev-loop/container/docker-compose.yml run --rm --build repro
+
+<span class="c"># runtime comparison (deno run / compile / node / bun) and the dev-loop strategies</span>
+bench/bench-comprehensive.sh
+bench/dev-loop/leak-confirm.sh</pre>
+  <ul class="clean">
+    <li><code>bench/dev-loop/npm-vs-jsr/</code> — the npm-vs-JSR control (root-cause)</li>
+    <li><code>bench/dev-loop/</code> — reload-loop benchmarks, localization probes, the container repro</li>
+    <li><code>bench/shim/</code> — the ~70-line <code>Deno</code> global shim for the Node/Bun runs</li>
+    <li><code>RUNTIME_MEMORY_REPORT.md</code> · <code>DENO_TEAM_FEEDBACK.md</code> — full write-ups</li>
+  </ul>
+</section>
+
+<footer>
+  <h2>Methodology &amp; honest caveats</h2>
+  <p>Memory = <code>VmRSS</code> / peak <code>VmHWM</code> from <code>/proc/&lt;pid&gt;/status</code>;
+  server and load generator pinned to separate cores; every run verified a live DB before measuring;
+  Node/Bun ran the unmodified app via a <code>Deno</code> global shim. The <code>--watch</code> finding
+  sharpened through the day — unbounded → graph-size → <strong>npm-specific</strong>, and the apparent
+  “plateau” proved container-only (linear on a roomy host to ≥2.7 GB) — because each better-controlled
+  experiment refined it; the conclusion here is the one that survived repetition, the heavy-JSR reversal,
+  the stock-glibc container, and a real <code>watchexec -r</code> control.</p>
+  <p class="small">Single-machine, indicative numbers; relative comparisons are the signal. No
+  secrets, credentials, hostnames, or paths are included. #28107’s open/closed status should be
+  confirmed on GitHub before citing it as a regression. · No production databases were harmed in this
+  investigation (one local dev container was briefly, accidentally, removed by an over-broad
+  <code>docker rm --filter name=t</code> — <code>postgres</code> contains a <code>t</code> — and
+  restored from its volume).</p>
+</footer>
+
+</div>
+</body>
+</html>

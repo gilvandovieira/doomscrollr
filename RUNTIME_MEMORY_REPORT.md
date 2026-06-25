@@ -237,6 +237,102 @@ disk and dominates image size regardless of base, so the base only saves ~90 MB.
 matters, use **distroless/cc** (glibc, 331 MB); Alpine is only an option if you *don't* compile
 (e.g. Node/Bun, which have official `*-alpine` musl images).
 
+## Part 6 — Root cause of the `--watch` retention: the `npm:` loader, not `--watch` itself
+
+Part 2's reload retention is specifically Deno's **`npm:`/Node-compat module layer** not releasing across
+reloads — JSR/native modules don't have it. (Matches Deno #28107.)
+
+**Same library, two loaders (the isolation):** `import { Hono }` from `npm:hono` retains ~**+19 MB/reload**
+across `--watch` reloads; from `jsr:@hono/hono` — identical code — ~**+2 MB**. The loader is the variable,
+not the library/bytes/module-count (the JSR build has *more* modules).
+
+**Per-dependency decomposition** (each npm dep alone on a `jsr:@hono/hono` base, no load):
+
+| npm dep | +MB/reload |
+|---|---:|
+| `drizzle-orm` | **+462** (~84% of the cost) |
+| `@clerk/backend` | +62 (npm-only floor) |
+| `hono` | +19 |
+| `pino` | +4 |
+| `postgres` (postgres.js) | +2 |
+
+Drizzle dominates; `postgres.js` is free — it's the ORM's module graph through node-compat, not the
+driver. Drizzle and Clerk are npm-only → the irreducible part.
+
+**Real app, real DB** (matched feed servers, `bench/jsr-bench/`; npm via Drizzle vs JSR via raw
+`@db/postgres`):
+
+| metric | npm | JSR | Δ |
+|---|---:|---:|---|
+| warm RSS | 496 MB | 152 MB | 3.3× less |
+| startup peak | 499 MB | 157 MB | 3.2× less |
+| `--watch` retention | +552 MB/reload | +64 MB/reload | 8.6× less |
+| `/feed` throughput | 2,745 rps | 2,531 rps | ~equal |
+
+Repro: `bench/dev-loop/npm-vs-jsr/run.sh` (the decomposition + same-library control) and
+`bench/jsr-bench/run.sh` (the real-DB comparison). External asks written from this:
+`DENO_TEAM_FEEDBACK.md` (the Deno `--watch` bug), `DRIZZLE_JSR_REQUEST.md`, `CLERK_JSR_REQUEST.md`.
+
+## Part 7 — `deno compile` does NOT help the JSR stack (it's an npm-stack fix)
+
+The Part 2/5 win — `deno run` 641 MB → `deno compile` 226 MB — is **specific to the npm/Drizzle stack.**
+Compiling the matched JSR feed server makes it *heavier*. Same DB, back-to-back
+(`bench/jsr-bench/compile-compare.sh`):
+
+| Stack | `deno run` warm | run peak | `deno compile` warm | compile peak | binary | compile |
+|---|---:|---:|---:|---:|---:|---:|
+| **JSR** (@hono/hono + @db/postgres + @std/log + @zod/zod) | **153 MB** | 156 MB | 234 MB | 301 MB | 226 MB | 3.8 s |
+| **npm** (hono + drizzle + postgres.js + pino + zod) | 639 MB | 698 MB | 235 MB | 296 MB | 223 MB | 3.0 s |
+
+Both binaries converge to a fixed **~234 MB floor** (JSR 234, npm 235 — they agree, cross-validating
+the measurement): the embedded Deno runtime + V8 snapshot baked into the ~225 MB binary. `deno compile`
+strips `deno run`'s npm-compat overhead — a **2.7× win for npm** (639→235) but a **~1.5× loss for JSR**
+(153→234), whose `deno run` already sits *below* the binary floor. The lightest warm config of anything
+measured is **JSR + plain `deno run`, 153 MB** — under both binaries, with the tightest startup peak.
+
+So the two low-memory paths are alternatives, not additive:
+
+- Stay on npm/Drizzle → `deno compile` (~226 MB, zero code change).
+- Go maximalist JSR → just `deno run` (~153 MB); **don't** compile.
+
+(npm `deno run` warm is core-pinning/warm-up sensitive — 639 MB here vs 496 in the earlier matched run;
+the JSR 153 and the ~234 compiled floor are stable.)
+
+## Part 8 — The dev loop: linear (not bounded), and the external-watcher + Kysely fix
+
+This is the part that actually bit (the original "3 GB lockup"), now fully characterized.
+
+**`--watch` is linear on a roomy host — it does NOT plateau (`bench/jsr-bench/plateau-test.sh`).** The
+minimal-npm (Clerk-floor) server climbed a straight line **143 → 2,740 MB over 41 saves**, slope
+unchanged end to end (+65 → +63 MB/save). It only plateaus (~600 MB) inside a **memory-capped
+container**, where cgroup pressure forces reclamation. On bare metal with free RAM nothing forces it, so
+it climbs to OOM. (This corrects the earlier "ramps then plateaus / bounded" framing — that plateau is
+environment-specific, not a host property.)
+
+**An external watcher fixes it — verified with real `watchexec -r` over 18 saves
+(`bench/jsr-bench/external-watcher-test.sh`).** A fresh `deno run` per change (~200 ms cold start) never
+stacks: the previous run's npm-compat layer dies with the process. The 2×2:
+
+| query layer | `deno run --watch` | `watchexec -r` (fresh process) |
+|---|---|---|
+| heavy npm — Drizzle | +530/save → 3.4 GB in 6 saves (OOM) | flat ~340 MB |
+| minimal npm — raw `@db/postgres` | +64/save → 2.7 GB in 41 saves (OOM) | flat ~147 MB |
+| minimal npm — **Kysely** (ORM feel) | +64/save → 2.7 GB in 41 saves (OOM) | **flat ~148 MB** |
+
+Two independent, additive axes: the **external watcher flattens the ramp** (every row goes flat), and
+**minimal npm lowers the baseline** (147 vs 340 MB). **Kysely is the practical Drizzle replacement** —
+a pure-ESM, zero-runtime-dep typed query builder used as a compiler over `@db/postgres`; it keeps
+compile-time type-safety and sits on the floor (152 MB warm, +64/save, ~+1 over the Clerk floor), ~8×
+under Drizzle, and needs no JSR publish (`npm:kysely` is already this clean through node-compat).
+
+**Why coding agents explode this:** the two mechanisms compound. Each `--watch` server self-inflates per
+save, *and* N agents run N servers → N processes each ramping linearly → 6–9 GB and a locked-up laptop,
+fast. An *idle* watch server is harmless; agents are the opposite of idle. And it takes only **one**
+`npm:` dependency — Drizzle alone explodes in ~6 saves, the lone Clerk floor climbs to OOM over ~41. It's
+the node-compat loader path, not the library (same Hono: +19 `npm:` vs +2 `jsr:`). The only safe configs
+are a fresh process per reload, zero npm deps (pure JSR), or memory-pressure (a capped container) — or
+Clerk shipping JSR, which would make `--watch` itself safe.
+
 ## Reproducing this
 
 Worktrees (kept on branches `bench/bun`, `bench/node`; Deno = `main`):
@@ -274,3 +370,16 @@ PORT=8092 deno run --allow-net --allow-env --allow-sys=hostname --env-file=../..
 - Numbers are dev-machine, single-instance, low-traffic. Steady-state under real concurrency
   will differ, but the **relative** runtime gap (Deno ≫ Node > Bun for this app) is large and
   consistent across both experiments.
+- The `deno run --watch` reload-accumulation finding (RSS grows ~475 MB/reload under real traffic;
+  matches Deno #28107; localized to native, non-GC-reclaimable retention) is in `bench/dev-loop/`
+  and written up for the Deno team in `DENO_TEAM_FEEDBACK.md`.
+
+## War story (kept out of the public issue, on purpose)
+
+During a cleanup pass a script ran `docker rm -f $(docker ps -aq --filter name=t)` to remove a
+throwaway container named `t`. Docker's `name` filter is a **substring** match, and `postgres`
+contains a `t` — so we force-removed the running `doomscrollr-postgres-1` container mid-benchmark
+(that's the source of a few stray `/api/feed/recent` 500s in the logs). It was a local dev
+container, the data lived in the `doomscrollr_postgres_data` named volume, and `docker compose up -d`
+brought it back with all 50 rows intact. No production database was harmed; one engineer's composure
+was. Lesson: `--filter name=t` is not a noun, it's a regex looking for trouble.

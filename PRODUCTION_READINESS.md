@@ -84,6 +84,44 @@ deno task build:web
 Serve `apps/web/dist` from the chosen static host/CDN. Do not bake runtime secrets into images or
 web assets.
 
+## Runtime, Memory & Deployment Targets
+
+Measured on this app (Hono + Drizzle + Clerk + postgres.js + Pino). Full data and reproductions in
+[`RUNTIME_MEMORY_REPORT.md`](RUNTIME_MEMORY_REPORT.md) and [`bench/`](bench/).
+
+- **Production build is `deno compile` (container).** The shipped `apps/api/Dockerfile` compiles a
+  standalone binary: warm RSS **~641 MB under `deno run` → ~226 MB compiled**, zero code change. The
+  saving is the npm/Node-compat startup transpile + retained module graph that `deno run` holds and the
+  binary drops. This is the single largest no-code-change production memory lever and is specific to this
+  npm-heavy (Drizzle) stack — a fully-JSR stack would not benefit from compiling.
+- **The compiled binary is glibc-only.** The runtime stage must stay on glibc —
+  `debian:bookworm-slim` (shipped) or `distroless/cc-debian12` (smaller). Alpine/musl cannot exec it
+  (`__res_init` failure). Do not switch the runtime stage to Alpine.
+- **`deno task start` (`deno run`) is the heavier path (~641 MB).** Prefer the compiled container image
+  for production; use the raw `start` only where a binary cannot be shipped.
+- **Never run `deno run --watch` for a long-lived process.** It retains the npm-compat module graph
+  across reloads and ramps linearly (~+530 MB/save with this stack) until OOM on a host with free RAM;
+  it only plateaus under a container memory cap. Dev uses `watchexec -r` (fresh process per change, flat
+  memory) — see the `apps/api` `dev` task and README. Production runs the compiled binary, which has no
+  watcher and is unaffected. This is also why several concurrent agents/editors on `--watch` could lock
+  up a dev machine.
+
+### Future: AWS Lambda (not deployed yet)
+
+Captured so the current build carries forward; none of the Lambda numbers below are measured on this app.
+
+- **Path A — stay on Deno: `deno compile` binary + AWS Lambda Web Adapter (container image).** Runs the
+  existing HTTP-server binary on Lambda with no rewrite; preserves dev/prod parity and ~226 MB. Cost:
+  Deno is not an official Lambda runtime, so this leans on LWA + OCI images (community-supported).
+- **Path B — Node managed runtime + `hono/aws-lambda`.** Lowest-friction and best-supported: every
+  dependency (Drizzle, Clerk, postgres.js, Hono) is npm-native, Node is a first-class managed runtime,
+  memory ≈ compiled Deno (~206 MB). Cost: migrate the entrypoint off `Deno.serve` — the `bench/shim/`
+  Deno-global shim already runs the app on Node unmodified, so the lift is modest.
+- **The real Lambda gate is connection pooling, not runtime memory.** Lambda concurrency × per-container
+  Postgres connections exhausts the database. Front Postgres with **RDS Proxy** (or pgBouncer / a
+  serverless driver) and set `postgres({ max: 1 })` per container before any rollout. Cold start and pool
+  behavior through RDS Proxy must be load-tested when Lambda becomes real.
+
 ## Pre-Launch Checklist
 
 - Rotate every secret ever stored in `.env.local` or any copied development env artifact.
@@ -97,6 +135,8 @@ web assets.
 - Check CSP in staging with real Clerk and YouTube flows.
 - Keep service worker disabled until its cache strategy is build-hash-safe.
 - Configure log shipping, retention, and alerting for `/ready`, 5xx rate, and DB errors.
+- Deploy the compiled `apps/api/Dockerfile` image (~226 MB RSS) as the API artifact, not
+  `deno task start` (~641 MB); keep the runtime base on glibc (debian-slim / distroless-cc), never Alpine.
 
 ## Remaining Risks
 
@@ -108,3 +148,6 @@ web assets.
 - Rate limiting is DB-backed and safe across API instances, but there is no separate edge/WAF layer.
 - Web static hosting, TLS termination, cookie domain policy, and CDN cache rules must be finalized
   in the deployment platform.
+- AWS Lambda is not yet validated for this app: the compiled-Deno-on-Lambda path (Lambda Web Adapter)
+  and Postgres connection pooling under Lambda concurrency (RDS Proxy) are unmeasured. See *Runtime,
+  Memory & Deployment Targets*.

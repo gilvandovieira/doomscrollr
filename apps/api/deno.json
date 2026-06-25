@@ -4,7 +4,8 @@
     ".": "./src/main.ts"
   },
   "tasks": {
-    "dev": "deno run --env-file=../../.env.local --watch --allow-net --allow-env --allow-sys=hostname src/main.ts",
+    "dev": "watchexec -r -e ts,tsx,json -w src -w ../../packages -- deno run --env-file=../../.env.local --allow-net --allow-env --allow-sys=hostname src/main.ts",
+    "dev:deno-watch": "deno run --env-file=../../.env.local --watch --allow-net --allow-env --allow-sys=hostname src/main.ts",
     "start": "deno run --allow-net --allow-env --allow-sys=hostname src/main.ts",
     "start:local": "deno run --env-file=../../.env.local --allow-net --allow-env --allow-sys=hostname src/main.ts",
     "check": "deno check src/main.ts",

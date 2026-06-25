@@ -66,6 +66,24 @@ deno task build:web    # production web build
 
 Run the API and web tasks in separate terminals during development.
 
+### Dev prerequisite — `watchexec`
+
+`deno task dev:api` uses [`watchexec`](https://github.com/watchexec/watchexec) to restart a **fresh**
+`deno run` on every change instead of `deno run --watch`. Deno's in-process `--watch` retains the
+npm/Node-compat module graph across reloads, so memory ramps every save (~+530 MB/save with this app's
+Drizzle stack — multi-GB in minutes, and worse with several editors or coding agents open at once); a
+fresh process per reload stays flat. Install it once:
+
+```sh
+# Arch/CachyOS: pacman -S watchexec   ·   macOS: brew install watchexec   ·   any: cargo install watchexec-cli
+watchexec --version
+```
+
+- No `watchexec`? Fall back to Deno's native watcher: `deno task --cwd apps/api dev:deno-watch`.
+- **CI does not need `watchexec`** — `deno task ci` never runs the dev watcher.
+- The measurements behind this are in [`RUNTIME_MEMORY_REPORT.md`](RUNTIME_MEMORY_REPORT.md)
+  (repro in [`bench/`](bench/)).
+
 ## Local database (clean slate)
 
 This is pre-launch local dev. To reset to a clean slate, drop the Postgres volume and re-apply the

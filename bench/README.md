@@ -1,9 +1,11 @@
 # Runtime benchmark — reproducible material
 
 Everything used to measure the API's memory and throughput across **Deno (`deno run`),
-Deno (`deno compile`), Node, and Bun**. Findings live in
-[`../RUNTIME_MEMORY_REPORT.md`](../RUNTIME_MEMORY_REPORT.md) (internal) and
-[`../DENO_TEAM_FEEDBACK.md`](../DENO_TEAM_FEEDBACK.md) (external). Numbers summarized in
+Deno (`deno compile`), Node, and Bun**, plus the **`npm:` vs JSR `--watch` retention** root-cause work.
+Findings live in [`../RUNTIME_MEMORY_REPORT.md`](../RUNTIME_MEMORY_REPORT.md) (internal) and these
+external write-ups: [`../DENO_TEAM_FEEDBACK.md`](../DENO_TEAM_FEEDBACK.md) (the `--watch` retention),
+[`../DRIZZLE_JSR_REQUEST.md`](../DRIZZLE_JSR_REQUEST.md) and
+[`../CLERK_JSR_REQUEST.md`](../CLERK_JSR_REQUEST.md) (JSR-publish requests). Numbers summarized in
 [`RESULTS.md`](./RESULTS.md).
 
 ## What's here
@@ -26,7 +28,15 @@ bench/
 │   ├── Dockerfile.alpine-gcompat  (FAILS: __res_init missing)
 │   └── Dockerfile.distroless      (WORKS: glibc, smallest)
 ├── logs/                     — boot logs kept as evidence (the multi-MB per-request logs were dropped)
+├── jsr-bench/                — matched real-DB feed servers (identical 3388-byte feed, real Postgres)
+│   ├── npm-feed.ts (drizzle), jsr-feed.ts (raw @db/postgres), kysely-feed.ts (npm:kysely compiler)
+│   ├── run.sh                —   npm vs jsr: warm/peak/cold/throughput + --watch retention
+│   ├── kysely-run.sh         —   kysely vs jsr vs npm, same session (Kysely sits on the JSR floor)
+│   ├── compile-compare.sh    —   deno run vs deno compile, both stacks (compile only helps npm)
+│   ├── plateau-test.sh       —   long --watch loop: linear on host (143→2740 over 41 saves), no plateau
+│   └── external-watcher-test.sh — real watchexec -r: fresh process per save stays FLAT (the fix)
 └── dev-loop/                 — reload-loop benchmarks + the `deno run --watch` MEMORY LEAK repro (see its README)
+    └── npm-vs-jsr/           — per-dep decomposition + same-library control (npm:hono vs jsr:@hono/hono)
 ```
 
 > **See also [`dev-loop/README.md`](./dev-loop/README.md)** — reproduces the `deno run --watch`
