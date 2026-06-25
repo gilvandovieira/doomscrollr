@@ -19,11 +19,11 @@
     "drizzle-orm": "npm:drizzle-orm@^0.44.5",
     "drizzle-orm/postgres-js": "npm:drizzle-orm@^0.44.5/postgres-js",
     "drizzle-orm/pg-core": "npm:drizzle-orm@^0.44.5/pg-core",
-    "hono": "npm:hono@^4.8.12",
-    "hono/cookie": "npm:hono@^4.8.12/cookie",
-    "hono/cors": "npm:hono@^4.8.12/cors",
+    "hono": "jsr:@hono/hono@^4.8.12",
+    "hono/cookie": "jsr:@hono/hono@^4.8.12/cookie",
+    "hono/cors": "jsr:@hono/hono@^4.8.12/cors",
     "pino": "npm:pino@^9.7.0",
     "postgres": "npm:postgres@^3.4.7",
-    "zod": "npm:zod@^3.25.76"
+    "zod": "npm:@jsr/zod__zod@^4"
   }
 }

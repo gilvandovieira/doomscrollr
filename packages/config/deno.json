@@ -8,6 +8,6 @@
     "test": "deno test --allow-env src"
   },
   "imports": {
-    "zod": "npm:zod@^3.25.76"
+    "zod": "npm:@jsr/zod__zod@^4"
   }
 }

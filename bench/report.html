@@ -297,6 +297,23 @@
     ~45 reloads vs ~6). <code>postgres.js</code> itself is free — the DB <em>driver</em> isn't the
     problem; Drizzle's ORM graph through node-compat is.</p>
   </div>
+
+  <h3>Do the safe JSR swaps alone help? No — Drizzle dominates</h3>
+  <p>Swapping our app's JSR-available deps (hono, zod, logging) to JSR <em>while keeping Drizzle</em>
+  barely moves the dev-loop ramp — Drizzle's +462/reload is the whole problem:</p>
+  <table>
+    <thead><tr><th>Deno stack</th><th class="n">warm RSS</th><th class="n"><code>--watch</code> retention</th></tr></thead>
+    <tbody>
+      <tr><td>all-npm (Drizzle + npm hono/zod/pino)</td><td class="n">574 MB</td><td class="n"><span class="pill grow">+528/save</span> OOM @ 6</td></tr>
+      <tr><td>safe-JSR only (hono/zod/log → JSR, Drizzle kept)</td><td class="n">496 MB</td><td class="n"><span class="pill grow">+510/save</span> OOM @ 6</td></tr>
+      <tr><td>Kysely + full safe-JSR (+ <code>@db/postgres</code>)</td><td class="n">158 MB</td><td class="n"><span class="pill flat">+64/save</span></td></tr>
+    </tbody>
+  </table>
+  <p>The safe swaps alone shave ~14% warm RSS (free) but only ~3% off the reload ramp — it still OOMs in
+  ~6 saves. <strong>Drizzle → Kysely is the move that matters</strong>; the hono/zod/log → JSR swaps are
+  cheap free-riders you do alongside it, not instead of it. Together they hit the floor: +64/save,
+  158 MB. Repro: <code>bench/jsr-bench/jsr-safe-run.sh</code>.</p>
+
   <p>Throughput is a wash (the DB query dominates), so the swap is pure upside on memory and startup —
   at the cost of Drizzle's query builder and an unavoidable Clerk floor.</p>
   <div class="callout">

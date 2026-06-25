@@ -1,0 +1,48 @@
+# ---- Lambda variant: run the SAME `deno compile` binary on AWS Lambda via the Lambda Web Adapter ----
+# Exploration of Path A in PRODUCTION_READINESS.md. The Lambda Web Adapter (LWA) is a Lambda extension
+# that translates API Gateway / Function URL / ALB events into ordinary HTTP requests to the app's
+# `Deno.serve` listener — so the app runs UNCHANGED (no Lambda handler rewrite, stays on Deno).
+# Deploy as a Lambda **container image**.
+#
+#   docker build -f apps/api/Dockerfile.lambda -t doomscrollr-api:lambda .
+#   # push to ECR, create a Lambda function from the image, add a Function URL (or API Gateway)
+#
+# Runtime secrets (DATABASE_URL, CLERK_*, PUBLIC_BASE_URL, WEB_ORIGIN, ...) come from the Lambda function
+# config / Secrets Manager — never baked into the image. Before real traffic, front Postgres with
+# RDS Proxy and set the pool to max=1 per container (Lambda concurrency × connections — see the report).
+
+# ---- builder: identical AOT compile to the container Dockerfile ----
+FROM denoland/deno:2.8.3 AS builder
+WORKDIR /app
+COPY deno.json deno.lock ./
+COPY apps/web/deno.json ./apps/web/deno.json
+COPY packages ./packages
+COPY apps/api ./apps/api
+RUN deno compile \
+      --allow-net --allow-env --allow-sys=hostname \
+      --lock=deno.lock \
+      --output /app/server \
+      apps/api/src/main.ts
+
+# ---- runtime: glibc base (deno binary is glibc-only) + the Lambda Web Adapter ----
+FROM debian:bookworm-slim AS runtime
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# LWA bridges the Lambda Runtime API <-> the app's HTTP port. It loads from /opt/extensions.
+COPY --from=public.ecr.aws/awsguru/aws-lambda-adapter:1.0.1 /lambda-adapter /opt/extensions/lambda-adapter
+
+WORKDIR /app
+COPY --from=builder /app/server /app/server
+
+# The app binds Deno.serve({ port: env.PORT }); AWS_LWA_PORT falls back to PORT, so one var covers both.
+ENV PORT=8000
+# Mark the execution env ready once the HTTP server is listening (liveness). Switch to /ready to also gate
+# on DB connectivity — but then keep Lambda init < 10s or set AWS_LWA_ASYNC_INIT=true.
+ENV AWS_LWA_READINESS_CHECK_PATH=/health
+ENV APP_ENV=production
+# Buffered is the default and fits this app's JSON/OG-HTML responses. For SSE/streamed responses use a
+# Function URL + AWS_LWA_INVOKE_MODE=response_stream.
+
+CMD ["/app/server"]

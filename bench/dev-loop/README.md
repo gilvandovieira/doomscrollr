@@ -14,11 +14,11 @@ Real app, real traffic on `/api/feed/recent` (a live Postgres query), `VmRSS` re
 | external watcher → fresh `deno run` | ~1.0 s | **631 MB — flat** |
 | external watcher → `deno compile` + binary | ~2.2 s (compile-bound) | **~221 MB — flat** |
 
-**Conclusion:** `--watch` reuses the process and is slow to reclaim the previous module graph/isolate,
-so memory **ramps** across reloads. Long runs show it is **bounded** — it plateaus at an elevated,
-load-dependent steady-state (~550–650 MB in the container config) and oscillates, rather than growing
-without limit. A fresh process per reload is flat. The fix for a non-blowing-up dev loop is an
-external watcher (`watchexec`/`entr`) that **kills and respawns** instead of `--watch`. A shorter
+**Conclusion:** `--watch` reuses the process and retains the previous npm/Node-compat module graph.
+On a roomy host, later long-run tests showed this is effectively **linear until OOM** rather than
+bounded; the earlier plateau only appeared inside a memory-capped container where cgroup pressure forced
+reclamation. A fresh process per reload is flat. The fix for a non-blowing-up dev loop is an external
+watcher (`watchexec`/`entr`) that **kills and respawns** instead of `--watch`. A shorter
 graceful-shutdown timeout fixes the reload *hang*, not this retention. (The reload loop under load is
 also CPU-bound, ~6 cores — see `container/README.md`.)
 

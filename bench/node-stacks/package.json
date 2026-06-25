@@ -1,0 +1,18 @@
+{
+  "name": "node-stacks-bench",
+  "private": true,
+  "type": "module",
+  "description": "Node-runtime feed servers to compare Drizzle vs Kysely and npm vs JSR-safe deps on Node.",
+  "dependencies": {
+    "@clerk/backend": "^3.7.1",
+    "@hono/hono": "npm:@jsr/hono__hono@^4.12.24",
+    "@hono/node-server": "^1.13.7",
+    "@zod/zod": "npm:@jsr/zod__zod@^4.4.3",
+    "drizzle-orm": "^0.44.5",
+    "hono": "^4.8.12",
+    "kysely": "^0.27.6",
+    "pino": "^9.7.0",
+    "postgres": "^3.4.7",
+    "zod": "^3.25.76"
+  }
+}

@@ -75,6 +75,20 @@ The reload retention is Deno's `npm:`/Node-compat loader, not `--watch` itself o
 → JSR is 3.3× lighter warm, 8.6× less reload retention, ~equal throughput. Drizzle is the killer
 (npm-only); Clerk is the +62 floor (npm-only); postgres.js is free.
 
+**Do the safe JSR swaps alone help? No — Drizzle dominates** (`bench/jsr-bench/jsr-safe-run.sh`, same
+session): swapping the JSR-available deps (hono/zod/logging) to JSR while *keeping Drizzle* barely moves
+the dev-loop ramp.
+
+| Deno stack | warm RSS | `--watch` retention |
+|---|---:|---|
+| all-npm (Drizzle + npm hono/zod/pino) | 574 MB | +528/save → OOM @ 6 |
+| safe-JSR only (hono/zod/log → JSR, Drizzle kept) | 496 MB | +510/save → OOM @ 6 |
+| **Kysely + full safe-JSR** (+ `@db/postgres`) | **158 MB** | **+64/save** |
+
+The safe swaps alone shave ~14% warm RSS (free) but only ~3% off the reload ramp — still OOMs in ~6
+saves. **Drizzle → Kysely is the move that matters**; hono/zod/log → JSR are cheap free-riders done
+alongside it, not instead. (npm warm RSS wanders 496–574 across runs; the retention is stable ~+510–550.)
+
 ## `deno compile` × JSR vs npm — compile does NOT help the JSR stack (`bench/jsr-bench/compile-compare.sh`)
 
 Same matched feed servers, same DB, back-to-back. `deno run` vs a `deno compile` binary:

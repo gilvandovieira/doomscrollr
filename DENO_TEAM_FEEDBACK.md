@@ -19,8 +19,9 @@
   npm package as ~one module but loads its bundled code + `node:` compat surface.)
 - A **fresh process per reload** (external watcher → `deno run`, or `deno compile`) stays **flat** — so
   it is `--watch` process reuse, not the app or workload.
-- Reclamation is **deferred, not absent**: a point-in-time `gc()` of the live isolate doesn't drop it
-  (it can't touch a *prior* run's retained isolate); over many reloads RSS reaches a ceiling.
+- Reclamation is **deferred and environment-dependent, not GC-driven**: a point-in-time `gc()` of the
+  live isolate doesn't drop it (it can't touch a *prior* run's retained isolate). A memory-capped
+  container reached a ceiling, but a roomy host kept climbing toward OOM in the later long-run test.
 - Not glibc-arena fragmentation; not V8 old-space (a 256 MB heap cap doesn't bound it → code-space /
   npm-compat native state is the suspect). Reproduces in the official `denoland/deno:2.8.3` image
   (Debian, stock glibc), so it isn't our distro.
@@ -108,11 +109,12 @@ Two operating points, and they differ by **environment**, not footprint:
   OOM) and we did not observe a plateau.
 
 So the container reclaims aggressively (low ceiling) while the host kept climbing; the variable
-separating them is the runtime/host reclamation behavior, not the per-run footprint. *Qualitatively*,
-if the reclamation lag is roughly constant then a large per-run npm footprint (e.g. #28107's
-transformers model) would explain reaching tens of GB — but we don't have the data to put a number on
-that, so we offer it only as a hypothesis. (Under concurrent load the reload loop is also **CPU-bound**,
-~6 of 20 cores, not memory-bound.)
+separating them is runtime/host memory pressure, not the per-run footprint. The conservative reading for
+development is: treat `--watch` with npm-heavy graphs as unsafe on roomy hosts, and use a fresh process
+per reload. *Qualitatively*, if the reclamation lag is roughly constant then a large per-run npm
+footprint (e.g. #28107's transformers model) would explain reaching tens of GB — but we don't have the
+data to put a number on that, so we offer it only as a hypothesis. (Under concurrent load the reload
+loop is also **CPU-bound**, ~6 of 20 cores, not memory-bound.)
 
 ## Reproduction
 

@@ -30,6 +30,9 @@ export default defineConfig(({ mode }) => {
     resolve: {
       dedupe: ["react", "react-dom"],
       alias: {
+        // zod is imported from JSR via the npm-compat package (`npm:@jsr/zod__zod`); map the bare
+        // specifier so Rollup/Vite resolves it from node_modules during the build.
+        zod: "@jsr/zod__zod",
         "@doomscrollr/shared": fileURLToPath(
           new URL("../../packages/shared/src", import.meta.url),
         ),

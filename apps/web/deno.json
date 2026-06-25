@@ -32,6 +32,6 @@
     "react/jsx-runtime": "npm:react@^18.3.1/jsx-runtime",
     "tailwindcss": "npm:tailwindcss@^3.4.17",
     "vite": "npm:vite@^7.0.4",
-    "zod": "npm:zod@^3.25.76"
+    "zod": "npm:@jsr/zod__zod@^4"
   }
 }
