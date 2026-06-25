@@ -37,5 +37,14 @@ async function shutdown(signal: "SIGTERM" | "SIGINT") {
   }
 }
 
-Deno.addSignalListener("SIGTERM", () => { shutdown("SIGTERM"); });
-Deno.addSignalListener("SIGINT", () => { shutdown("SIGINT"); });
+// Deno Deploy manages the process lifecycle and may not support OS signal listeners;
+// guard so startup can never fail there. On containers/local these enable graceful drain.
+try {
+  Deno.addSignalListener("SIGTERM", () => { shutdown("SIGTERM"); });
+  Deno.addSignalListener("SIGINT", () => { shutdown("SIGINT"); });
+} catch (error) {
+  logger.warn({
+    event: "signal_listeners_unsupported",
+    message: error instanceof Error ? error.message : "unknown",
+  });
+}

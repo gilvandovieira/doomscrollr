@@ -2,6 +2,7 @@ import { readServerEnv } from "@doomscrollr/config/env.ts";
 import { Hono } from "hono";
 import type { MiddlewareHandler } from "hono";
 import { cors } from "hono/cors";
+import { serveStatic } from "hono/deno";
 import { checkDatabaseReady, hasDatabase } from "./db/client.ts";
 import { renderDefaultOgImageSvg } from "./lib/og.ts";
 import { errorHandler } from "./middleware/error-handler.ts";
@@ -65,6 +66,13 @@ app.get("/ready", async (c) => {
   return c.json({ status: "ready", checks: { database: "ok" } });
 });
 
+// Lightweight DB liveness probe (runs SELECT 1). Distinct from /ready so uptime
+// monitors can hit a stable /api path.
+app.get("/api/health/db", async (c) => {
+  const ok = hasDatabase() ? await checkDatabaseReady() : false;
+  return c.json({ database: ok ? "ok" : "unavailable" }, ok ? 200 : 503);
+});
+
 app.get("/og-default.svg", (c) =>
   c.body(renderDefaultOgImageSvg(), 200, {
     "content-type": "image/svg+xml; charset=utf-8",
@@ -86,6 +94,26 @@ app.route("/api/admin", adminRoutes);
 // Server-rendered canonical post pages. Registered before any SPA fallback so
 // crawlers read Open Graph metadata without executing JavaScript (spec §11).
 app.route("/p", pageRoutes);
+
+// --- Single-deployment static SPA serving --------------------------------------
+// The frontend is built by `deno task build:web` into apps/web/dist; this server
+// serves it directly so the whole app deploys as ONE Deno Deploy project. Registered
+// after /api and /p so those always win. Path is resolved from this module (not CWD)
+// so it works whether the process starts at the repo root (Deno Deploy) or apps/api.
+const WEB_DIST = new URL("../../web/dist/", import.meta.url).pathname;
+
+// Unknown /api/* paths return JSON 404 — never the SPA shell.
+app.all(
+  "/api/*",
+  (c) => c.json({ error: { code: "NOT_FOUND", message: "Resource not found." } }, 404),
+);
+
+// Real build artifacts: hashed /assets/*, icons, manifest.webmanifest, sw.js, index.html.
+app.use("*", serveStatic({ root: WEB_DIST }));
+
+// SPA fallback: client-routed paths (/@user, /create, /admin/...) return the app shell.
+// Reuses the working root-based serveStatic, rewriting any path to index.html.
+app.get("*", serveStatic({ root: WEB_DIST, rewriteRequestPath: () => "/index.html" }));
 
 function securityHeaders(): MiddlewareHandler {
   const csp = buildContentSecurityPolicy();

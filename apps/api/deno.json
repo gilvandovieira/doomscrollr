@@ -4,10 +4,10 @@
     ".": "./src/main.ts"
   },
   "tasks": {
-    "dev": "watchexec -r -e ts,tsx,json -w src -w ../../packages -- deno run --env-file=../../.env.local --allow-net --allow-env --allow-sys=hostname src/main.ts",
-    "dev:deno-watch": "deno run --env-file=../../.env.local --watch --allow-net --allow-env --allow-sys=hostname src/main.ts",
-    "start": "deno run --allow-net --allow-env --allow-sys=hostname src/main.ts",
-    "start:local": "deno run --env-file=../../.env.local --allow-net --allow-env --allow-sys=hostname src/main.ts",
+    "dev": "watchexec -r -e ts,tsx,json -w src -w ../../packages -- deno run --env-file=../../.env.local --allow-net --allow-env --allow-sys=hostname --allow-read=../web/dist src/main.ts",
+    "dev:deno-watch": "deno run --env-file=../../.env.local --watch --allow-net --allow-env --allow-sys=hostname --allow-read=../web/dist src/main.ts",
+    "start": "deno run --allow-net --allow-env --allow-sys=hostname --allow-read=../web/dist src/main.ts",
+    "start:local": "deno run --env-file=../../.env.local --allow-net --allow-env --allow-sys=hostname --allow-read=../web/dist src/main.ts",
     "check": "deno check src/main.ts",
     "test": "deno test --allow-env src"
   },
@@ -22,6 +22,7 @@
     "hono": "jsr:@hono/hono@^4.8.12",
     "hono/cookie": "jsr:@hono/hono@^4.8.12/cookie",
     "hono/cors": "jsr:@hono/hono@^4.8.12/cors",
+    "hono/deno": "jsr:@hono/hono@^4.8.12/deno",
     "pino": "npm:pino@^9.7.0",
     "postgres": "npm:postgres@^3.4.7",
     "zod": "npm:@jsr/zod__zod@^4"

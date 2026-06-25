@@ -7,8 +7,13 @@ const env = readServerEnv();
 const databaseUrl = env.DATABASE_URL;
 const queryClient = databaseUrl
   ? postgres(databaseUrl, {
-    max: 10,
+    // Tuned for Neon Free + serverless (Deno Deploy): each isolate holds its own pool,
+    // so keep `max` low to stay under Neon's connection limit. `prepare: false` is required
+    // for Neon's pooled endpoint (PgBouncer transaction mode rejects named prepared
+    // statements); it is harmless on a direct connection. Drizzle + transactions are unaffected.
+    max: 5,
     idle_timeout: 20,
+    prepare: false,
   })
   : null;
 
