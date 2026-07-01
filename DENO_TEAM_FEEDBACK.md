@@ -1,54 +1,44 @@
-# `deno run --watch` per-reload RSS ramp to OOM on 2.9.0 — the trigger is an on-disk `node_modules` (`nodeModulesDir: "auto"`); a `jsr:@hono` + `npm:@clerk/backend` island ramps linearly, and `--node-modules-dir=none` makes the *same code* plateau
+# `deno run --watch` retains the node-compat module graph of resolved `npm:` deps every reload → linear OOM on 2.9.0 — gated by the `deno.lock` (`--no-lock` turns it off) and on-disk `node_modules`
 
 > _Disclaimer: this report was researched and drafted with the assistance of an LLM (Anthropic's Claude). The
 > measurements are real and independently reproducible via the scripts/commands referenced herein; the LLM
 > assisted with the benchmarking, isolation, and write-up._
 
-> **This is the updated version.** After filing, we isolated an additional trigger — an on-disk `node_modules`
-> (`nodeModulesDir: "auto"`) — that the originally-filed text didn't mention, and the version below now leads
-> with it. The original post is filed as **[#35664]**; a short, plain-words reproduction is in
-> `DENO_TEAM_FEEDBACK_FOLLOWUP.md`.
-
-> **Update for Deno 2.9.0 (leads; the original 2.8.3 report is retained as a baseline at the bottom).**
-> The original report (Deno **2.8.3**, follow-up to [#28107]) showed `deno run --watch` retaining `npm:`/
-> Node-compat module graphs per reload — an all-`npm:` stack climbed **+530 MB/reload → OOM in ~6 saves**. On
-> 2.9.0 the homogeneous-`npm:` case is fixed (it **plateaus ~295 MB** and reclaims). **But `--watch` still
-> ramps to OOM for one shape, and we have now pinned its trigger to an on-disk `node_modules`:**
+> **Latest finding — the switch is the `deno.lock`.** (See `DENO_TEAM_FEEDBACK_FOLLOWUP_FINAL.md` for the
+> plain-words version.) `deno run --watch` retains the **node-compat module graph of the resolved `npm:`
+> dependencies** on every reload and never reclaims it → linear RSS ramp to OOM. It reproduces in a **bare
+> two-file project** (`jsr:@hono` + `npm:@clerk/backend`, 11 packages) as soon as a `deno.lock` exists:
+> **~+48 MB per save, dead linear**. Two flags each turn it off — **`--no-lock`** (drop the resolved set) and
+> **`--node-modules-dir=none`** (don't materialize the deps). It **scales with the `npm:` dep's weight** (Clerk
+> ~+48, `hono` ~+17, postgres.js ~+2, no npm dep ~0 — the same ordering as the original 2.8.3 per-dep table),
+> **not** with `node_modules` size / count / contents (11 packages ramps like 200), and **not** with
+> `jsr`-vs-`npm` framework composition (with a lock, `npm:hono` + Clerk ramps too, ~+66).
 >
-> - **Necessary condition — `nodeModulesDir: "auto"` (an on-disk `node_modules`).** The *same*
->   `jsr:@hono` + `npm:@clerk/backend` file ramps **+57 MB/reload → OOM** with `node_modules` materialized on
->   disk, but **plateaus ~120 MB** when run with `--node-modules-dir=none` (npm deps served from Deno's global
->   cache). One flag flips ramp ↔ plateau.
-> - **It's the _contents_ of a real install, not `node_modules` size.** The same 2-import server ramps
->   **+56/reload** against our app's real `node_modules`, but stays flat against a *synthetic* `node_modules`
->   of similar size — and copying our real `node_modules` into a bare folder (one-line `deno.json`, no
->   workspace) reproduces the ramp (+48/reload). So **a bare two-file snippet in an empty folder does _not_
->   reproduce; a real project (or a copy of its `node_modules`) does.** We have not isolated which package(s).
-> - **Composition still sets ramp vs plateau at a fixed `node_modules`.** With the 199 MB `node_modules` held
->   constant, `jsr:@hono` + Clerk ramps linearly while `npm:hono` + Clerk **plateaus** (~240 MB, confirmed over
->   20 reloads). So the ramp is **(jsr-framework + `npm:` island) × on-disk `node_modules`** — a JSR-native
->   framework plus the one npm dep with no JSR build (Clerk), run the normal way (`nodeModulesDir: "auto"`).
-> This is exactly our app's shape (`@hono/hono`, `@sisal/*` + `npm:@clerk/backend`).
+> **On the sections below — they are the investigation trail.** Two intermediate framings in this document,
+> *"it scales with `node_modules` size"* and then *"it's the `node_modules` contents"*, were **artifacts of
+> `--no-lock`** — a flag our bench scripts passed, which suppresses the effect in a fresh folder and made the
+> repo look special. The `deno.lock` finding above supersedes both. The original post is filed as **[#35664]**.
 
-## TL;DR — the ramp needs an on-disk `node_modules`
+## TL;DR — the `deno.lock` is the switch
 
-| condition (Deno 2.9.0) | behavior |
+All rows: Deno 2.9.0, `deno run --watch`, `nodeModulesDir: "auto"`, server serves nothing (just saves/reloads).
+
+| condition | behavior |
 |---|---|
-| `jsr:@hono` + `npm:@clerk/backend`, **`nodeModulesDir: "auto"`** (our repo, 199 MB `node_modules`) | **+56 MB/reload, linear → OOM** ❌ |
-| **same file, `--node-modules-dir=none`** (npm deps from Deno's global cache) | **plateaus ~120 MB** ✅ |
-| same file, **2-package `node_modules`** (empty folder) | +4–6 MB/reload, plateaus |
-| `npm:hono` + `npm:@clerk/backend`, `nodeModulesDir: "auto"` | **plateaus ~240 MB** ✅ |
-| all-`npm:` (hono + drizzle + … + clerk), `nodeModulesDir: "auto"` | **plateaus ~295 MB**, reclaims ✅ |
-| `jsr:@hono` + `postgres.js` / `@db/postgres`, `nodeModulesDir: "auto"` | **plateaus** (~243 / ~378) |
+| `jsr:@hono` + `npm:@clerk/backend` (11 pkgs), **`deno.lock` present (default)** | **+48 MB/save, linear → OOM** ❌ |
+| same file, **`--no-lock`** | flat (~+5, reclaims) ✅ |
+| same file, **`--node-modules-dir=none`** | flat ✅ |
+| `npm:hono` + `npm:@clerk/backend` + lock | **+66 MB/save → OOM** (framework doesn't matter) |
+| `jsr:@hono` + `npm:postgres` (light dep) + lock | ~+2, flat |
+| `jsr:@hono` only (no npm dep) + lock | ~0, flat |
+| our 200-package repo | +48–56 (same rate as the 11-package project) |
 
-Three findings stack up. (1) The **necessary condition is an on-disk `node_modules`** — with
-`--node-modules-dir=none` the identical code plateaus; one flag flips it. (2) It's the **contents of a real
-install, not `node_modules` size** — a *synthetic* `node_modules` of the same size stays flat, but copying our
-real `node_modules` into a bare folder reproduces the ramp; individual heavy packages (`drizzle-orm` imported,
-or `@jsr/zod`) don't trigger it on their own. (3) At a fixed `node_modules`, **composition** decides ramp vs
-plateau: a `jsr:` framework + an `npm:` island (Clerk) ramps, while all-`npm:` reclaims. Net: the ramp needs a
-**real, materialized `node_modules`** plus the **(jsr-framework + `npm:` island)** shape — so a minimal
-two-file snippet won't show it; run it in a real project (below). We have not isolated which package(s).
+The ramp is the node-compat module graph of the resolved `npm:` deps, retained per reload and never reclaimed.
+It needs **both** a resolved dependency set (a `deno.lock` in default mode — or a workspace `deno.json`) **and**
+those deps materialized on disk (`nodeModulesDir`). It **scales with the dep's weight, not `node_modules`
+size/count** (11 packages ramps like 200). **`--no-lock`** or **`--node-modules-dir=none`** each turn it off.
+Simplest repro: two ~10-line files + `deno install` (no repo, no workspace) — see
+`DENO_TEAM_FEEDBACK_FOLLOWUP_FINAL.md`.
 
 ## The trigger — an on-disk `node_modules` (`nodeModulesDir: "auto"`)
 
@@ -222,20 +212,18 @@ watchexec -r -e ts -- deno run --allow-net --allow-env --allow-sys=hostname --en
 
 ## The ask (reframed)
 
-1. **Why does `nodeModulesDir: "auto"` ramp when `--node-modules-dir=none` reclaims?** This is the cleanest
-   lever we found: the *identical* `deno run --watch` + `jsr:@hono` + `npm:@clerk/backend` file **ramps
-   linearly to OOM** with an on-disk `node_modules` and **plateaus ~120 MB** with `--node-modules-dir=none`.
-   Whatever `--watch` retains per reload seems tied to the on-disk `node_modules` materialization. It's the
-   *contents* of a real install — copying our `node_modules` into a bare folder reproduces it — **not** the
-   size (a synthetic same-size `node_modules` doesn't ramp) and **not** any single heavy package (`drizzle-orm`
-   or `@jsr/zod` alone don't). We have not isolated the exact package(s).
-2. **Please reopen [#28107] (or track this as a new issue).** Its "resolved — it plateaus" close holds for
-   the homogeneous-npm path on 2.9 (we confirm the plateau, ~295 MB), but is **directly contradicted** by a
-   `deno run --watch` + `jsr:@hono` + `npm:@clerk/backend` case (run the normal way, `nodeModulesDir: "auto"`)
-   that ramps **linearly to OOM** (no plateau, no reclamation) on x86_64/glibc — no DB, no native addon. The
-   #28107 repro exercised only the WASM path on macOS; this `node_modules`-dependent path wasn't covered.
-   Secondary question: at a fixed `node_modules`, why does `npm:hono` + Clerk plateau (~240 MB) while
-   `jsr:@hono` + Clerk ramps? The composition matters on top of the `node_modules` trigger.
+1. **Why does a `deno.lock` flip `deno run --watch` from flat to a linear OOM ramp?** This is the cleanest
+   lever: the *identical* two-file project (`jsr:@hono` + `npm:@clerk/backend`) **ramps ~+48 MB/save, dead
+   linear, to OOM** with a `deno.lock` present (default), and stays **flat (~+5)** with `--no-lock`; on-disk
+   materialization is also required (`--node-modules-dir=none` is flat too). It looks like `--watch` retains
+   the node-compat module graph of the **resolved** `npm:` dependency set per reload and never reclaims it — a
+   `deno.lock` (or a workspace `deno.json`) is what makes Deno resolve that full set. It scales with the dep's
+   node-compat weight (Clerk ~+48, `hono` ~+17, postgres.js ~+2), **not** with `node_modules` size/count.
+2. **Please reopen [#28107] (or track this as a new issue).** Its "resolved — it plateaus" close is
+   **directly contradicted** by a minimal `deno run --watch` + `jsr:@hono` + `npm:@clerk/backend` + `deno.lock`
+   case that ramps **linearly to OOM** (no plateau, no reclamation) on x86_64/glibc — 11 packages, no DB, no
+   native addon, no workspace. The #28107 repro exercised only the WASM path on macOS; this lockfile-gated
+   node-compat retention wasn't covered.
 3. **Does [#35136] ("shut down old workers on watcher restart") apply to `deno run --watch` + `Deno.serve`,
    or only `deno serve --parallel`?** The mechanism it fixes (old workers/isolate state not cancelled on
    restart) is the same class, but #26052/#35136 are scoped to `deno serve`. If `deno run --watch` doesn't

@@ -1,5 +1,12 @@
 # Follow-up on #35664 — how to reproduce it (in simple terms)
 
+> ⚠️ **Superseded by `DENO_TEAM_FEEDBACK_FOLLOWUP_FINAL.md`.** This version blamed the on-disk `node_modules`
+> (its size, then its contents). That was an artifact of `--no-lock`, which every repro here inherited from our
+> bench scripts and which suppresses the effect in a fresh folder. The real switch is the **`deno.lock`**: with
+> a lockfile present, a bare two-file project ramps ~+48 MB/save → OOM; `--no-lock` makes it flat. See the FINAL
+> follow-up for the correct, minimal reproduction. The steps below still work (our repo does ramp), but the
+> *explanation* here is wrong.
+
 A quick update to make this easy to reproduce. One extra thing we found:
 
 **The ramp only shows up when the npm packages are installed on disk in a `node_modules` folder** — the normal
