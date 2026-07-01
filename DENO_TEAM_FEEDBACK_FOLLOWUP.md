@@ -1,77 +1,49 @@
-# Follow-up: the minimal repro, in plain terms
+# Follow-up on #35664 — how to reproduce it (in simple terms)
 
-Thanks for taking a look. Here's the smallest version of the problem, stripped of our app and the DB.
+A quick update to make this easy to reproduce. One extra thing we found:
 
-## The one comparison that matters
+**The ramp only shows up when the npm packages are installed on disk in a `node_modules` folder** — the normal
+setup, `"nodeModulesDir": "auto"` in `deno.json`. If you just drop the two files into an empty folder, it does
+**not** ramp. That's most likely why a small snippet wouldn't reproduce.
 
-Two bare Hono servers. Same Deno (2.9.0), same machine, same reload loop, **same Clerk import**. The only
-difference is where `Hono` comes from:
+## The quickest check — same file, one flag
 
-```ts
-// A — ramps linearly to OOM
-import { Hono } from "jsr:@hono/hono";
-import { verifyToken } from "npm:@clerk/backend";
+Run the same server two ways and watch its memory after each save:
+
+```
+deno run --watch bench/jsr-bench/iso-jsr-hono-clerk.ts                          → grows every save, never comes back → OOM
+deno run --watch --node-modules-dir=none bench/jsr-bench/iso-jsr-hono-clerk.ts  → stays flat (~120 MB)
 ```
 
-```ts
-// B — plateaus and stays flat
-import { Hono } from "npm:hono";
-import { verifyToken } from "npm:@clerk/backend";
-```
+The only difference: the second one reads the npm packages from Deno's global cache instead of an on-disk
+`node_modules`. Same code, opposite result.
 
-Run each under `deno run --watch` and save the file repeatedly. What we measure is the RSS of the (same,
-long-lived) process after each reload:
+## Run it in our repo — full steps
 
-- **A (`jsr:@hono` + `npm:@clerk/backend`): ramps ~+51 MB per reload, dead straight — 133 MB → 2.4 GB in 45 saves, no plateau.**
-- **B (`npm:hono` + `npm:@clerk/backend`): plateaus around ~265 MB and reclaims.**
-
-So it isn't "a reload leaks memory" in general, and it isn't "an `npm:` dependency is present" — because B has
-the exact same `npm:@clerk/backend` and it's fine. The thing that ramps is the **heavy `npm:@clerk/backend`
-node-compat module graph specifically when it's the minority `npm:` island inside a JSR-dominant graph.** Swap
-the JSR framework for its npm twin and the ramp disappears.
-
-## Why we're confident it's that and not something nearby
-
-Same loop, one variable at a time, each soaked long enough to tell a plateau from a ramp (a short 5–6 reload
-window can't — a ramp and a plateau look identical early):
-
-| minimal stack | result |
-|---|---|
-| `jsr:@hono/hono` alone | plateaus (~201 MB) |
-| `npm:hono` alone | plateaus (~225 MB) |
-| `jsr:@hono` + `npm:postgres` (a *light* npm dep) | plateaus (~243 MB) |
-| **`jsr:@hono` + `npm:@clerk/backend`** | **ramps +51 MB/reload → OOM** |
-| `npm:hono` + `npm:@clerk/backend` | plateaus (~265 MB) |
-
-Reading it off: the loader by itself isn't the axis (both bare framework imports plateau), and "any npm dep in a
-JSR graph" isn't it either (postgres.js is a lightweight npm dep and plateaus). It's the combination — a **heavy**
-npm node-compat graph left un-reclaimed per reload when it's the odd `npm:` dependency in an otherwise-JSR graph.
-
-This matters for real apps because Clerk has no JSR build, so a JSR-native Deno app can't avoid it: the one
-required `npm:@clerk/backend` import is itself the trigger.
-
-## The reload loop, in ~10 lines (no DB, no app)
-
-Save one of the two snippets as `server.ts`, then:
+You need Deno and Linux (we read memory from `/proc`). No database, no `.env`.
 
 ```bash
-deno run --watch --no-lock --allow-net --allow-env --allow-sys=hostname server.ts &
-pid=$!            # deno --watch keeps the SAME pid across reloads, so we can sample it
-sleep 5
-for i in $(seq 1 45); do
-  echo "// reload $i" >> server.ts        # a save = one --watch restart, in place
-  sleep 3                                  # let it tear down + come back up
-  awk -v i="$i" '/VmRSS/{printf "reload %2d: %d MB\n", i, $2/1024}' /proc/$pid/status
-done
-kill "$pid"
+git clone https://github.com/gilvandovieira/doomscrollr && cd doomscrollr
+deno install                                   # puts the packages on disk in node_modules — this is the part that matters
+RELOADS=60 bash bench/jsr-bench/repro-clerk-island.sh
 ```
 
-Run it against A and you'll watch the number climb every single reload and never come back down; run it against
-B and it settles. (A hard memory cap on the process would force reclamation and fake a plateau, so this just
-watches RSS and lets it ramp.)
+It runs two servers, prints the memory after each reload, and stops at **3 GB** so it won't OOM your machine.
+What we see (Deno 2.9.0, Linux x86_64):
 
-## Offer
+```
+jsr:@hono + npm:@clerk/backend  →  climbs ~55 MB every save, straight line → hits the 3 GB cap
+npm:hono  + npm:@clerk/backend  →  settles around ~270 MB
+```
 
-If it helps triage, I can drop this into a tiny standalone reproduction repo — pinned versions, a `deno.json`,
-the two entry files, and the `watch-soak.sh` loop we use — so you can clone and run it in one command. Just say
-the word.
+If you skip `deno install`, only the two servers' own packages land in `node_modules` (small), so it plateaus
+instead of ramping. The full app's `node_modules` is what makes it ramp — and the bigger `node_modules` is, the
+faster it climbs.
+
+## The two files
+
+- `bench/jsr-bench/iso-jsr-hono-clerk.ts` and `iso-npm-hono-clerk.ts` — two ~10-line Hono servers. The only
+  difference is the `Hono` import (`jsr:` vs `npm:`); the `npm:@clerk/backend` import is the same in both.
+- `bench/jsr-bench/repro-clerk-island.sh` — runs both and prints the numbers, with the 3 GB cap.
+
+Happy to trim this further or answer anything.

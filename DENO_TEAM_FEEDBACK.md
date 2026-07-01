@@ -1,35 +1,81 @@
-# `deno run --watch` per-reload RSS retention — 2.9.0: homogeneous-`npm:` graphs now plateau, but a heavy `npm:` dep (Clerk) as an island in a JSR-dominant graph still ramps to OOM
+# `deno run --watch` per-reload RSS ramp to OOM on 2.9.0 — the trigger is an on-disk `node_modules` (`nodeModulesDir: "auto"`); a `jsr:@hono` + `npm:@clerk/backend` island ramps linearly, and `--node-modules-dir=none` makes the *same code* plateau
 
 > _Disclaimer: this report was researched and drafted with the assistance of an LLM (Anthropic's Claude). The
 > measurements are real and independently reproducible via the scripts/commands referenced herein; the LLM
 > assisted with the benchmarking, isolation, and write-up._
 
+> **This is the updated version.** After filing, we isolated an additional trigger — an on-disk `node_modules`
+> (`nodeModulesDir: "auto"`) — that the originally-filed text didn't mention, and the version below now leads
+> with it. The original post is filed as **[#35664]**; a short, plain-words reproduction is in
+> `DENO_TEAM_FEEDBACK_FOLLOWUP.md`.
+
 > **Update for Deno 2.9.0 (leads; the original 2.8.3 report is retained as a baseline at the bottom).**
 > The original report (Deno **2.8.3**, follow-up to [#28107]) showed `deno run --watch` retaining `npm:`/
-> Node-compat module graphs per reload — an all-`npm:` stack (Hono + Drizzle + … + Clerk) climbed
-> **+530 MB/reload → OOM in ~6 saves**. **On 2.9.0 the homogeneous-`npm:` case is fixed:** that same all-npm
-> stack now **plateaus ~295 MB** and reclaims, and bare `npm:hono` plateaus too (was +19/reload on 2.8.3).
-> **But `--watch` is not fully fixed** — long soaks plus a fresh single-variable isolation on 2.9 pin a
-> remaining **unbounded** ramp to **`npm:@clerk/backend` when it is an `npm:` island in an otherwise-JSR
-> module graph**: `jsr:@hono` + Clerk climbs **+51 MB/reload, dead-linear → OOM** (133 → 2.4 GB in 45 saves),
-> while the *same* Clerk in an all-`npm:` graph plateaus, and a *light* npm dep (postgres.js) never triggers
-> it. This is exactly our app's shape: a JSR-native framework (`@hono/hono`, `@sisal/*`) plus the one npm dep
-> that has no JSR build — Clerk.
+> Node-compat module graphs per reload — an all-`npm:` stack climbed **+530 MB/reload → OOM in ~6 saves**. On
+> 2.9.0 the homogeneous-`npm:` case is fixed (it **plateaus ~295 MB** and reclaims). **But `--watch` still
+> ramps to OOM for one shape, and we have now pinned its trigger to an on-disk `node_modules`:**
+>
+> - **Necessary condition — `nodeModulesDir: "auto"` (an on-disk `node_modules`).** The *same*
+>   `jsr:@hono` + `npm:@clerk/backend` file ramps **+57 MB/reload → OOM** with `node_modules` materialized on
+>   disk, but **plateaus ~120 MB** when run with `--node-modules-dir=none` (npm deps served from Deno's global
+>   cache). One flag flips ramp ↔ plateau.
+> - **Magnitude scales with total `node_modules` size, not the import graph.** That 2-import server barely
+>   moves against a 2-package `node_modules` (+4–6/reload, plateaus), but ramps **+56/reload** against our
+>   app's 199 MB workspace `node_modules` — most of which it never imports. **A bare two-file snippet in an
+>   empty folder therefore does _not_ reproduce; a real project does.**
+> - **Composition still sets ramp vs plateau at a fixed `node_modules`.** With the 199 MB `node_modules` held
+>   constant, `jsr:@hono` + Clerk ramps linearly while `npm:hono` + Clerk **plateaus** (~240 MB, confirmed over
+>   20 reloads). So the ramp is **(jsr-framework + `npm:` island) × on-disk `node_modules`** — a JSR-native
+>   framework plus the one npm dep with no JSR build (Clerk), run the normal way (`nodeModulesDir: "auto"`).
+> This is exactly our app's shape (`@hono/hono`, `@sisal/*` + `npm:@clerk/backend`).
 
-## TL;DR — what changed 2.8.3 → 2.9.0
+## TL;DR — the ramp needs an on-disk `node_modules`
 
-| stack | 2.8.3 (original report) | 2.9.0 (now) |
+| condition (Deno 2.9.0) | behavior |
+|---|---|
+| `jsr:@hono` + `npm:@clerk/backend`, **`nodeModulesDir: "auto"`** (our repo, 199 MB `node_modules`) | **+56 MB/reload, linear → OOM** ❌ |
+| **same file, `--node-modules-dir=none`** (npm deps from Deno's global cache) | **plateaus ~120 MB** ✅ |
+| same file, **2-package `node_modules`** (empty folder) | +4–6 MB/reload, plateaus |
+| `npm:hono` + `npm:@clerk/backend`, `nodeModulesDir: "auto"` | **plateaus ~240 MB** ✅ |
+| all-`npm:` (hono + drizzle + … + clerk), `nodeModulesDir: "auto"` | **plateaus ~295 MB**, reclaims ✅ |
+| `jsr:@hono` + `postgres.js` / `@db/postgres`, `nodeModulesDir: "auto"` | **plateaus** (~243 / ~378) |
+
+Three findings stack up. (1) The **necessary condition is an on-disk `node_modules`** — with
+`--node-modules-dir=none` the identical code plateaus; one flag flips it. (2) The **magnitude scales with the
+total `node_modules` size**, not the import graph — the same 2-import server plateaus against a small
+`node_modules` and ramps against our 199 MB one. (3) At a fixed `node_modules`, **composition** decides ramp vs
+plateau: a `jsr:` framework + an `npm:` island (Clerk) ramps, while all-`npm:` reclaims. Net: the ramp is
+**(jsr-framework + `npm:` island) × on-disk `node_modules` size** — and because it needs a materialized
+`node_modules`, a minimal two-file snippet won't show it; run it in a real project (below).
+
+## The trigger — an on-disk `node_modules` (`nodeModulesDir: "auto"`)
+
+The single decisive variable is whether the npm deps are materialized to an on-disk `node_modules`. Same file
+(`iso-jsr-hono-clerk.ts`), same machine, only the resolution mode changes:
+
+```
+deno run --watch iso-jsr-hono-clerk.ts                          → boot 155 → 613 MB in 8 reloads (+57/reload), ramps to OOM
+deno run --watch --node-modules-dir=none iso-jsr-hono-clerk.ts  → boot  81, flat ~120 MB, plateaus
+```
+
+With `--node-modules-dir=none` the npm deps load from Deno's global cache and the same code reclaims per
+reload. With `nodeModulesDir: "auto"` (the default way a Deno app that uses npm packages is run, and what our
+repo sets) it ramps linearly. **This is why a bare two-file snippet in an empty folder doesn't reproduce** — it
+needs a real `node_modules`.
+
+And the magnitude tracks the **total size of `node_modules`, not the entry's import graph**:
+
+| `iso-jsr-hono-clerk.ts` run against… | `node_modules` | per-reload |
 |---|---|---|
-| **all-`npm:`** — hono + drizzle + … + clerk | +530 MB/reload → **OOM ~6 saves** | **plateaus ~295 MB**, reclaims ✅ |
-| bare `npm:hono` | +19 MB/reload | **plateaus ~225 MB** ✅ |
-| **`jsr:@hono` + `npm:@clerk/backend`** (npm island in a JSR graph) | +62/reload (Clerk = the "npm floor") | **+51 MB/reload, linear → OOM** ❌ |
-| `jsr:@hono` + `postgres.js` *or* `@db/postgres` | +2 / +64 | **plateaus** (~243 / ~378) |
+| empty folder (only its 2 deps materialized) | small | +4–6, plateaus ~120 |
+| a 5-dep project (hono+clerk+drizzle+postgres+pino) | 33 MB | plateaus ~250 |
+| **our app's workspace `node_modules`** | **199 MB** | **+56, linear → OOM** |
 
-On 2.9 the npm-compat retention is fixed **for homogeneous-`npm:` graphs** — they reclaim and plateau. What
-remains is a **heavy** npm dependency (Clerk; Drizzle was the 2.8.3 example) whose node-compat module graph is
-retained **linearly per reload** when it sits as a **minority island in a JSR-dominant graph** — unbounded to
-OOM. A *light* npm dep (postgres.js) doesn't trigger it, and the same heavy dep in a homogeneous-npm graph
-plateaus. So the axis is **npm-dep node-compat weight × graph composition**, not the loader per se.
+The server imports only `@hono/hono` + `@clerk/backend` in every row — the only thing that changes is how much
+sits in `node_modules` on disk (our 199 MB is mostly frontend deps it never imports). Notably the 5-dep row has
+a *bigger import graph* than the last row but a *smaller `node_modules`*, and it plateaus — so it tracks the
+on-disk tree, not what's imported. `--watch` appears to retain something proportional to the materialized
+`node_modules` per reload and never reclaim it, once an `npm:` island sits in a JSR-dominant graph.
 
 ## 2.9.0 evidence — two long `--watch` soaks
 
@@ -69,7 +115,12 @@ decelerates and caps ~295 MB; the JSR/pg-driver stacks look similar early (+63�
 short window overestimates the long-run rate for plateau-ers and hides the unbounded ones — long soaks are
 required.
 
-## The 2.9 isolation — culprit: a heavy `npm:` dep as an island in a JSR graph
+## The 2.9 isolation — composition axis (at a fixed on-disk `node_modules`)
+
+> All rows below were measured **in our repo** (`nodeModulesDir: "auto"`, the 199 MB workspace
+> `node_modules`), so the on-disk-`node_modules` trigger above is held constant across them — this table
+> isolates the *second* factor, graph composition. The same rows in an empty folder (no materialized
+> `node_modules`) all plateau, including the `jsr:@hono` + Clerk one.
 
 We re-ran the original report's same-library control **with long soaks** (5 reloads can't tell plateau from
 ramp), then added one dependency at a time on a bare Hono base (no load; same soak/cap method, ~45 reloads):
@@ -136,11 +187,22 @@ in a JSR graph.**
 ## Reproduction (2.9.0)
 
 ```bash
-# minimal single-variable isolation (no DB needed) — each is a bare Hono server:
+# EASIEST — from the repo root (needs the on-disk node_modules; no DB, no .env). Runs BOTH cases + a verdict.
+# A) jsr:@hono + npm:@clerk/backend → RAMPS ;  B) npm:hono + npm:@clerk/backend → PLATEAUS.
+deno install                                   # materialize node_modules (nodeModulesDir: auto) — this is what makes it ramp
+RELOADS=30 bash bench/jsr-bench/repro-clerk-island.sh
+# (Linux: RSS is read from /proc; tested on Deno 2.9.0. A bare copy of the two files in an empty
+#  folder does NOT ramp — the ramp needs node_modules materialized on disk. See below.)
+
+# THE on/off switch — same file, only the resolution mode changes (run from the repo root, no DB):
+deno run --watch --allow-net --allow-env --allow-sys=hostname bench/jsr-bench/iso-jsr-hono-clerk.ts                       # → RAMPS to OOM
+deno run --watch --node-modules-dir=none --allow-net --allow-env --allow-sys=hostname bench/jsr-bench/iso-jsr-hono-clerk.ts  # → PLATEAUS ~120 MB
+
+# single-variable isolation via the soak harness (no DB; run from the repo root so node_modules is on disk):
 #   iso-jsr-hono-clerk.ts : import { Hono } from "jsr:@hono/hono"; import { verifyToken } from "npm:@clerk/backend"
 #   iso-npm-hono-clerk.ts : import { Hono } from "npm:hono";        import { verifyToken } from "npm:@clerk/backend"
-CAP_MB=3000 MAX_RELOADS=45 bash bench/jsr-bench/watch-soak.sh iso-jsr-hono-clerk.ts  # → RAMPS +51/reload → OOM
-CAP_MB=3000 MAX_RELOADS=45 bash bench/jsr-bench/watch-soak.sh iso-npm-hono-clerk.ts  # → plateaus ~265 MB
+CAP_MB=3000 MAX_RELOADS=45 bash bench/jsr-bench/watch-soak.sh iso-jsr-hono-clerk.ts  # → RAMPS +56/reload → OOM
+CAP_MB=3000 MAX_RELOADS=45 bash bench/jsr-bench/watch-soak.sh iso-npm-hono-clerk.ts  # → plateaus ~240 MB
 CAP_MB=3000 MAX_RELOADS=45 bash bench/jsr-bench/watch-soak.sh iso-jsr-hono-pgjs.ts   # → plateaus ~243 MB (light npm dep)
 # full-stack confirmation:
 CAP_MB=3000 MAX_RELOADS=160 bash bench/jsr-bench/watch-soak.sh npm-feed.ts        # all-npm     → plateaus ~295 MB
@@ -151,17 +213,19 @@ watchexec -r -e ts -- deno run --allow-net --allow-env --allow-sys=hostname --en
 
 ## The ask (reframed)
 
-1. **Please reopen [#28107] (or track this as a new issue).** Its "resolved — it plateaus" close holds for
+1. **Why does `nodeModulesDir: "auto"` ramp when `--node-modules-dir=none` reclaims?** This is the cleanest
+   lever we found: the *identical* `deno run --watch` + `jsr:@hono` + `npm:@clerk/backend` file **ramps
+   linearly to OOM** with an on-disk `node_modules` and **plateaus ~120 MB** with `--node-modules-dir=none`.
+   Whatever `--watch` retains per reload seems tied to the on-disk `node_modules` materialization — and the
+   magnitude scales with the tree's total size, not the import graph (a 2-import server ramps against our
+   199 MB `node_modules`, most of which it never imports).
+2. **Please reopen [#28107] (or track this as a new issue).** Its "resolved — it plateaus" close holds for
    the homogeneous-npm path on 2.9 (we confirm the plateau, ~295 MB), but is **directly contradicted** by a
-   minimal, isolated **`deno run --watch` + `jsr:@hono` + `npm:@clerk/backend`** case that ramps **linearly
-   to OOM** (133 MB → 2.4 GB in 45 reloads, no plateau, no reclamation) on x86_64/glibc — no DB, no native
-   addon. The #28107 repro exercised only the WASM path on macOS; a heavy `npm:` dep as a minority island in
-   a JSR graph wasn't covered.
-2. **Why does a heavy `npm:` dep reclaim in a homogeneous-npm graph but not as an island in a JSR graph?**
-   Same `npm:@clerk/backend`: with `npm:hono` it plateaus (~265 MB); with `jsr:@hono` it ramps to OOM. The
-   2.9 reclamation that fixed the all-npm case appears not to cover the npm-compat module graph of a lone npm
-   dep in an otherwise-JSR module graph. A *light* npm dep (postgres.js) doesn't trigger it, so it scales
-   with the dep's node-compat weight.
+   `deno run --watch` + `jsr:@hono` + `npm:@clerk/backend` case (run the normal way, `nodeModulesDir: "auto"`)
+   that ramps **linearly to OOM** (no plateau, no reclamation) on x86_64/glibc — no DB, no native addon. The
+   #28107 repro exercised only the WASM path on macOS; this `node_modules`-dependent path wasn't covered.
+   Secondary question: at a fixed `node_modules`, why does `npm:hono` + Clerk plateau (~240 MB) while
+   `jsr:@hono` + Clerk ramps? The composition matters on top of the `node_modules` trigger.
 3. **Does [#35136] ("shut down old workers on watcher restart") apply to `deno run --watch` + `Deno.serve`,
    or only `deno serve --parallel`?** The mechanism it fixes (old workers/isolate state not cancelled on
    restart) is the same class, but #26052/#35136 are scoped to `deno serve`. If `deno run --watch` doesn't
@@ -182,6 +246,7 @@ watchexec -r -e ts -- deno run --allow-net --allow-env --allow-sys=hostname --en
 | Deno | **2.9.0** (stable, x86_64-unknown-linux-gnu) |
 | CPU / RAM | i7-12700H (20 cores) / 15 GiB |
 | DB | Postgres 16 (Docker, loopback) |
+| Resolver | `nodeModulesDir: "auto"`, 199 MB on-disk workspace `node_modules` (the trigger) |
 
 ---
 
@@ -189,9 +254,10 @@ watchexec -r -e ts -- deno run --allow-net --allow-env --allow-sys=hostname --en
 
 > Everything in this appendix was measured on **Deno 2.8.3** and is **superseded** by the 2.9 update above
 > for the all-npm case. It is kept because (a) it documents the same-library `npm:` vs `jsr:` control and
-> per-dep methodology — which we **did re-run on 2.9** (see *The 2.9 isolation* above; culprit = a heavy npm
-> dep as an island in a JSR graph, i.e. Clerk), and (b) it records the npm-compat mechanism that 2.9 fixed
-> for homogeneous-npm graphs.
+> per-dep methodology — which we **did re-run on 2.9** (see *The trigger* and *The 2.9 isolation* above), and
+> (b) it records the npm-compat mechanism that 2.9 fixed for homogeneous-npm graphs. **Caveat:** these 2.8.3
+> runs were also in-repo with `nodeModulesDir: "auto"`, so the on-disk-`node_modules` trigger we isolated on
+> 2.9 very likely applied on 2.8.3 too — we have not re-tested 2.8.3 with `--node-modules-dir=none`.
 
 **Same library, two resolution paths (the 2.8.3 isolation).** `import { Hono }` from `npm:hono` retained
 ~**+19 MB/reload**; from `jsr:@hono/hono` ~**+2 MB/reload** (×2, stable) — identical library/code, only the
@@ -229,3 +295,4 @@ Fresh process per reload (external watcher / `deno compile`) stayed flat.
 [#28107]: https://github.com/denoland/deno/issues/28107
 [#35136]: https://github.com/denoland/deno/pull/35136
 [#26052]: https://github.com/denoland/deno/issues/26052
+[#35664]: https://github.com/denoland/deno/issues/35664

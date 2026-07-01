@@ -29,6 +29,9 @@ bench/
 │   └── Dockerfile.distroless      (WORKS: glibc, smallest)
 ├── logs/                     — boot logs kept as evidence (the multi-MB per-request logs were dropped)
 ├── jsr-bench/                — matched real-DB feed servers (identical 3388-byte feed, real Postgres)
+│   ├── repro-clerk-island.sh —   ONE COMMAND, no DB: the `deno run --watch` ramp — jsr:@hono+clerk (ramps) vs npm:hono+clerk (plateaus)
+│   ├── watch-soak.sh         —   generic long `--watch` soak for any stack: ramp-vs-plateau + verdict
+│   ├── iso-*.ts              —   single-variable isolation servers (bare Hono + one dep)
 │   ├── npm-feed.ts (drizzle), jsr-feed.ts (raw @db/postgres), kysely-feed.ts (npm:kysely compiler)
 │   ├── run.sh                —   npm vs jsr: warm/peak/cold/throughput + --watch retention
 │   ├── kysely-run.sh         —   kysely vs jsr vs npm, same session (Kysely sits on the JSR floor)

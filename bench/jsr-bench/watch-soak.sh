@@ -24,7 +24,10 @@ kill8094(){ local p; p=$(ss -ltnp 2>/dev/null|grep ":$PORT "|grep -oP 'pid=\K[0-
 cleanup(){ kill8094; sed -i '/^\/\/ reload [0-9]* [0-9]*$/d' "$FILE"; }
 trap cleanup EXIT
 
-bash -c 'echo > /dev/tcp/localhost/5433' 2>/dev/null || { echo "DB :5433 down"; exit 1; }
+# Only the DB-backed feed stacks need Postgres; the bare iso-*.ts servers don't touch DATABASE_URL.
+if grep -q DATABASE_URL "$FILE"; then
+  bash -c 'echo > /dev/tcp/localhost/5433' 2>/dev/null || { echo "DB :5433 down"; exit 1; }
+fi
 echo "Deno: $(deno --version | head -1)"
 echo "stack: $(basename "$FILE")  cap=${CAP_MB}MB  max_reloads=${MAX_RELOADS}  plateau_if<${PLATEAU_MB}MB/10reloads"
 
