@@ -142,3 +142,119 @@ reload, zero npm deps (pure JSR), or a capped container. Clerk on JSR would make
 - Lambda native runtime → Node (only managed option → parity; memory ≈ compiled Deno).
 - Absolute min memory → Bun (but no Lambda-native; container only).
 - Throughput is ~a wash for this DB-bound app; memory + cold start are the real differentiators.
+
+---
+
+# Re-baseline (2026-06-30) — Deno 2.9.0, + Sisal ORM
+
+Machine: same 20-core host. **Deno 2.9.0** (the sections above were **2.8.3**). Same local Postgres 16
+(`:5433`), same feed query, same core pinning (server 0-3, loadgen 8-15), `@clerk/backend` npm floor in
+every stack. Harness: `bench/jsr-bench/sisal-vs-run.sh` (4 stacks × 3 rounds, `--minimum-dependency-age=0
+--no-lock` so every stack resolves current-latest — the workspace pins a 2026-06-24 age cutoff that would
+otherwise block the post-cutoff `@sisal/*` packages). Stack files: `npm-feed.ts` (Drizzle), `jsr-feed.ts`
+(raw `@db/postgres`), `kysely-jsr-full.ts` (Kysely), `sisal-feed.ts` (`@sisal/orm` + `@sisal/pg`, which
+rides `jsr:@db/postgres`).
+
+Medians of 3 rounds (warm RSS is warm-up sensitive — range shown):
+
+| Stack | warm RSS (med) | warm range | startup peak | post-load RSS | `/feed` rps | p50 | `--watch` +MB/reload |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| npm — **Drizzle** | 130 | 111–183 | ~1584 | 242 | 5,550 | 2.0 ms | +17 (12–23) |
+| jsr — raw `@db/postgres` | 180 | 152–185 | ~997 | 236 | 3,001 | 3.7 ms | +60 (55–61) |
+| **Kysely** (compiler + `@db/postgres`) | 127 | 127–202 | ~1658 | 138 | 25† | 505 ms† | +11 (8–13) |
+| **Sisal** (`@sisal/orm` + `@sisal/pg`) | 162 | 148–191 | ~968 | 179 | 120† | 90 ms† | +61 (54–74) |
+
+## Headline: Deno 2.9 dissolved the npm-compat memory tax
+
+The entire 2.8.3 story above — **Drizzle at 496–639 MB warm and +530 MB/`--watch` reload → OOM in ~6 saves**
+— is **gone on 2.9.0.** Same Drizzle stack now sits at **~130 MB warm** (median) with **+17 MB/reload**. The
+`--watch` linear-ramp-to-OOM that motivated `watchexec` and the whole "Drizzle is the killer" conclusion no
+longer reproduces on this runtime. All four stacks now cluster in a tight **~127–190 MB warm** band; the old
+~8× Drizzle-vs-JSR spread has collapsed. The 2.8.3 findings should be read as **version-specific to that
+Deno**, not intrinsic to the stack.
+
+Two inversions vs 2.8.3 worth noting: (1) the **JSR-driver stacks now retain *more* per `--watch` reload**
+(raw +60, Sisal +61) than the npm stacks (Drizzle +17, Kysely +11) — the opposite of before; (2) Drizzle's
+warm RSS is at/under raw `@db/postgres`. None of it matters much: every stack is far under the old ceiling.
+
+## Where Sisal lands
+
+- **Memory: competitive, in the pack.** 162 MB warm median (148–191), and the **lowest startup peak tested
+  (~968 MB, tied with raw `@db/postgres`)** — well under Drizzle/Kysely's ~1.6 GB npm-compat transpile
+  transient. On 2.9 Sisal does **not** beat Drizzle on warm RSS (they're within noise), but it's the same
+  class — respectable for a v0.5.0 ORM, and fully JSR-native (no npm-compat loader, portable).
+- **Throughput: the real gap.** Sisal served **120 rps at ~90 ms p50** vs Drizzle's 5,550 rps @ 2 ms and raw
+  `@db/postgres`'s 3,001 @ 3.7 ms — a **~45× throughput / ~25× latency gap**, *stable across all 3 rounds*
+  (90.2 / 90.0 / 88.5 ms). Since `@sisal/pg` rides the same `@db/postgres` driver that raw uses at 3.7 ms,
+  the ~90 ms is **Sisal's own per-request overhead** (SQL build/render + decode, or pool-acquisition
+  cost), not the driver. This is the thing to profile before any real swap.
+
+† **Throughput is not apples-to-apples**: each bench file uses a different connection strategy (Drizzle =
+postgres.js pool `max:5`; raw & Kysely = a single non-pooled `@db/postgres` `Client`; Sisal = `@db/postgres`
+`Pool(5)` via `@sisal/pg`). Kysely's 25 rps / **505 ms** (eerily constant) is an artifact of that stack's
+single-Client path, not a Kysely property — treat both Kysely and Sisal throughput as indicative, not
+ranked. The **memory** columns are the clean comparison.
+
+## Bottom line for the Drizzle → Sisal question
+
+On **Deno 2.9**, the memory argument for leaving Drizzle has largely evaporated (Drizzle ≈ 130 MB warm,
+`--watch` no longer ramps). So a Sisal swap would be justified by **ergonomics / JSR-portability / owning the
+ORM**, not by RAM. Sisal is memory-competitive today but carries a **large, reproducible per-query latency
+penalty (~90 ms)** that should be profiled and closed before it's a candidate for the real app's hot feed
+path. Recommend: re-confirm the 2.9 memory picture holds for the *full* app (not just the feed stack) before
+weighting memory at all, and treat the Sisal throughput gap as the gating issue.
+
+## Follow-up (2026-06-30): the postgres.js adapter closes — and reverses — the gap
+
+The ~90 ms Sisal throughput gap was root-caused to `jsr:@db/postgres`'s parameterized/extended-protocol path
+(a ~42 ms/query TCP delayed-ACK stall — see `SISAL_PG_ADAPTER_PERF_REPORT.md`). A prototype postgres.js-backed
+`PgPool` injected via the public `connect({ pool })` (no Sisal source change,
+`bench/jsr-bench/sisal-postgresjs-pool.ts`) was benchmarked as a 5th stack (`sisal-pgjs-feed.ts`), full suite,
+3 rounds, same session:
+
+| Stack (Deno 2.9.0) | warm RSS (med) | range | startup peak | post-load RSS | `/feed` rps | p50 | `--watch` +MB/reload |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| npm — Drizzle (postgres.js) | 122 | 121–139 | ~1555 | 232 | 5,445 | 2.0 ms | +15 |
+| jsr — raw `@db/postgres` (literals) | 179 | 155–188 | ~955 | 237 | 2,888 | 3.8 ms | +60 |
+| Kysely (`@db/postgres`, parameterized) | 130 | 128–147 | ~1612 | 140 | 25 | 505 ms | +26 |
+| Sisal → `@db/postgres` (parameterized) | 155 | 146–155 | ~951 | 173 | 120 | 90 ms | +62 |
+| **Sisal → postgres.js (prototype)** | **169** | 151–171 | **~968** | 276 | **6,774** | **1.6 ms** | +69 |
+
+**Result: the driver swap took Sisal from last to first on throughput** — 120 → **6,774 rps** (~56×), 90 ms →
+**1.6 ms** p50, now **ahead of Drizzle** (5,445 rps @ 2.0 ms; both ride postgres.js, so it's a wash ±noise).
+Rows identical, interactive `db.transaction()` intact (adapter reserves a connection per `pool.connect()`).
+
+**Memory cost of the swap is small.** warm RSS 169 MB (vs Sisal-default 155, Drizzle 122) and post-load 276 MB
+(vs 232) — postgres.js adds some working set, but Sisal+postgres.js **keeps the lowest-tier startup peak
+(~968 MB, like Sisal-default; vs Drizzle/Kysely's ~1.6 GB npm-compat transient)** and stays mid-pack warm.
+`--watch` +69/reload, in line with the other postgres.js/JSR-driver stacks and far under the old 2.8.3 ceiling.
+
+**Net:** on Deno 2.9, Sisal + a postgres.js driver = **Drizzle-class-or-better throughput + full ORM ergonomics
++ competitive memory + the lowest startup peak.** The only open item is upstreaming the driver into `@sisal/pg`
+(or fixing `TCP_NODELAY` in deno-postgres so the JSR-native driver is viable too).
+
+## Released: `@sisal/pg` v0.5.1 (2026-07-01, clean re-run)
+
+The driver shipped in **`@sisal/pg` v0.5.1** as a built-in, selected via `connect({ url, driver:
+"postgres-js" })` (postgres.js lazily `import()`-ed; `@db/postgres` stays the pure-JSR default; the release also
+adds bigint/date/timestamp decoders so rows are byte-identical across drivers). Full 5-stack suite re-run
+against the **published** `jsr:@sisal/pg@0.5.1` + `@sisal/orm@0.5.1` — `sisal-pgjs-feed.ts` now uses the
+official option, not the injected prototype. **An initial run overlapped with Sisal's own repo benchmarks and
+was discarded** for CPU/DB contention (npm rps drifted 5,491 → 4,760 across rounds); the numbers below are the
+clean re-run on an idle box (rps tight round-to-round).
+
+| Stack (Deno 2.9.0, @sisal 0.5.1) | warm RSS (med) | range | startup peak | post-load | `/feed` rps | p50 | `--watch` +MB/reload |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| npm — Drizzle (postgres.js) | 136 | 132–186 | ~1603 | 247 | 5,638 | 2.0 ms | +18 |
+| jsr — raw `@db/postgres` (literals) | 163 | 145–182 | ~976 | 223 | 2,971 | 3.8 ms | +65 |
+| Kysely (`@db/postgres`, parameterized) | 129 | 117–136 | ~1550 | 140 | 25 | 505 ms | +10 |
+| Sisal → `@db/postgres` (v0.5.1 default) | 169 | 163–173 | ~951 | 187 | 120 | 91 ms | +63 |
+| **Sisal → postgres.js (v0.5.1 driver)** | **157** | 148–159 | **~957** | 264 | **6,655** | **1.65 ms** | +64 |
+
+**The shipped v0.5.1 driver reproduces the prototype exactly: 6,655 rps @ 1.65 ms** (prototype was 6,774 @
+1.6 ms) — top of the table, **ahead of Drizzle** (5,638 @ 2.0 ms) and **~55× over Sisal-default** (120 @ 91 ms).
+Memory story unchanged: warm 157 MB (mid-pack), **lowest-tier startup peak ~957 MB** (vs Drizzle/Kysely
+~1.6 GB), post-load 264 MB, `--watch` +64. Cross-round consistency (Drizzle 5,628–5,645; Sisal+pgjs
+6,579–6,706) confirms the clean run vs the discarded contended one. **Ship-and-done: `@sisal/pg` v0.5.1 with
+`driver: "postgres-js"` delivers Drizzle-class-or-better throughput + Sisal ergonomics + competitive memory +
+the lowest startup peak of any stack tested.**

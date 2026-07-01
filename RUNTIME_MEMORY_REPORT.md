@@ -338,8 +338,8 @@ Clerk shipping JSR, which would make `--watch` itself safe.
 Worktrees (kept on branches `bench/bun`, `bench/node`; Deno = `main`):
 
 ```
-/home/g/Projetos/doomscrollr-bun   (branch bench/bun)
-/home/g/Projetos/doomscrollr-node  (branch bench/node)
+../doomscrollr-bun   (branch bench/bun)    # git worktrees, siblings of this repo
+../doomscrollr-node  (branch bench/node)
 ```
 
 Each worktree adds, at its root: `deno-shim.ts`, `boot.ts`, `package.json`, `tsconfig.json`
@@ -347,15 +347,15 @@ Each worktree adds, at its root: `deno-shim.ts`, `boot.ts`, `package.json`, `tsc
 
 ```bash
 # Bun
-cd /home/g/Projetos/doomscrollr-bun  && bun install
+cd ../doomscrollr-bun  && bun install
 PORT=8090 bun boot.ts
 
 # Node (tsx handles .ts + tsconfig paths; node 26 --env-file loads .env.local)
-cd /home/g/Projetos/doomscrollr-node && npm install --legacy-peer-deps
+cd ../doomscrollr-node && npm install --legacy-peer-deps
 PORT=8091 node --env-file=.env.local --import tsx boot.ts
 
 # Deno (current app)
-cd /home/g/Projetos/doomscrollr/apps/api
+cd apps/api   # from the repo root
 PORT=8092 deno run --allow-net --allow-env --allow-sys=hostname --env-file=../../.env.local src/main.ts
 
 # Measure (per pid): grep -E 'VmRSS|VmHWM' /proc/<pid>/status

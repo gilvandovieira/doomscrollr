@@ -6,7 +6,7 @@ set -u
 HERE="$(cd "$(dirname "$0")" && pwd)"
 WT="$(cd "$HERE/.." && pwd)"
 ENV="$WT/.env.local"
-LOAD="${LOAD:-/home/g/Projetos/doomscrollr/bench/load.ts}"
+LOAD="${LOAD:-$WT/load.ts}"
 PORT=8094
 set -a; source "$ENV" 2>/dev/null; set +a
 

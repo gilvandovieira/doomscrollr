@@ -41,5 +41,9 @@
     "@doomscrollr/config/": "./packages/config/src/",
     "@doomscrollr/database/": "./packages/database/src/",
     "@doomscrollr/shared/": "./packages/shared/src/"
+  },
+  "deploy": {
+    "org": "gv",
+    "app": "doomscrollr"
   }
 }
