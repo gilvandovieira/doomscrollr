@@ -36,9 +36,13 @@ jsr:@hono + npm:@clerk/backend  →  climbs ~55 MB every save, straight line →
 npm:hono  + npm:@clerk/backend  →  settles around ~270 MB
 ```
 
-If you skip `deno install`, only the two servers' own packages land in `node_modules` (small), so it plateaus
-instead of ramping. The full app's `node_modules` is what makes it ramp — and the bigger `node_modules` is, the
-faster it climbs.
+If you skip `deno install`, only the two servers' own packages land in `node_modules` (small) and it stays
+flat. The full app's `node_modules` is what makes it ramp. We also checked *what* about it matters, and it's the
+**contents of the real install, not the size**: copying our `node_modules` into a bare folder with a one-line
+`deno.json` (no workspace) reproduces the ramp (+48 MB/reload), while a *synthetic* `node_modules` of the same
+size stays flat. Individual heavy packages on their own don't trigger it either — importing `drizzle-orm`'s full
+module graph, or adding `@jsr/zod`, each stays flat — so it seems to need the full real dependency set. We
+haven't pinned the exact package(s) yet.
 
 ## The two files
 

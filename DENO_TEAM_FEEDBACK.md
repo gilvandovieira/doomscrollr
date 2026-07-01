@@ -19,10 +19,11 @@
 >   `jsr:@hono` + `npm:@clerk/backend` file ramps **+57 MB/reload → OOM** with `node_modules` materialized on
 >   disk, but **plateaus ~120 MB** when run with `--node-modules-dir=none` (npm deps served from Deno's global
 >   cache). One flag flips ramp ↔ plateau.
-> - **Magnitude scales with total `node_modules` size, not the import graph.** That 2-import server barely
->   moves against a 2-package `node_modules` (+4–6/reload, plateaus), but ramps **+56/reload** against our
->   app's 199 MB workspace `node_modules` — most of which it never imports. **A bare two-file snippet in an
->   empty folder therefore does _not_ reproduce; a real project does.**
+> - **It's the _contents_ of a real install, not `node_modules` size.** The same 2-import server ramps
+>   **+56/reload** against our app's real `node_modules`, but stays flat against a *synthetic* `node_modules`
+>   of similar size — and copying our real `node_modules` into a bare folder (one-line `deno.json`, no
+>   workspace) reproduces the ramp (+48/reload). So **a bare two-file snippet in an empty folder does _not_
+>   reproduce; a real project (or a copy of its `node_modules`) does.** We have not isolated which package(s).
 > - **Composition still sets ramp vs plateau at a fixed `node_modules`.** With the 199 MB `node_modules` held
 >   constant, `jsr:@hono` + Clerk ramps linearly while `npm:hono` + Clerk **plateaus** (~240 MB, confirmed over
 >   20 reloads). So the ramp is **(jsr-framework + `npm:` island) × on-disk `node_modules`** — a JSR-native
@@ -41,12 +42,13 @@
 | `jsr:@hono` + `postgres.js` / `@db/postgres`, `nodeModulesDir: "auto"` | **plateaus** (~243 / ~378) |
 
 Three findings stack up. (1) The **necessary condition is an on-disk `node_modules`** — with
-`--node-modules-dir=none` the identical code plateaus; one flag flips it. (2) The **magnitude scales with the
-total `node_modules` size**, not the import graph — the same 2-import server plateaus against a small
-`node_modules` and ramps against our 199 MB one. (3) At a fixed `node_modules`, **composition** decides ramp vs
-plateau: a `jsr:` framework + an `npm:` island (Clerk) ramps, while all-`npm:` reclaims. Net: the ramp is
-**(jsr-framework + `npm:` island) × on-disk `node_modules` size** — and because it needs a materialized
-`node_modules`, a minimal two-file snippet won't show it; run it in a real project (below).
+`--node-modules-dir=none` the identical code plateaus; one flag flips it. (2) It's the **contents of a real
+install, not `node_modules` size** — a *synthetic* `node_modules` of the same size stays flat, but copying our
+real `node_modules` into a bare folder reproduces the ramp; individual heavy packages (`drizzle-orm` imported,
+or `@jsr/zod`) don't trigger it on their own. (3) At a fixed `node_modules`, **composition** decides ramp vs
+plateau: a `jsr:` framework + an `npm:` island (Clerk) ramps, while all-`npm:` reclaims. Net: the ramp needs a
+**real, materialized `node_modules`** plus the **(jsr-framework + `npm:` island)** shape — so a minimal
+two-file snippet won't show it; run it in a real project (below). We have not isolated which package(s).
 
 ## The trigger — an on-disk `node_modules` (`nodeModulesDir: "auto"`)
 
@@ -63,19 +65,26 @@ reload. With `nodeModulesDir: "auto"` (the default way a Deno app that uses npm 
 repo sets) it ramps linearly. **This is why a bare two-file snippet in an empty folder doesn't reproduce** — it
 needs a real `node_modules`.
 
-And the magnitude tracks the **total size of `node_modules`, not the entry's import graph**:
+It is **not** raw `node_modules` size, and **not** any single heavy package. A controlled sweep (same server;
+`node_modules` size varied only via *unimported* packages) did **not** scale with size — a 124 MB synthetic
+`node_modules` ramped *less* than a 33 MB one. What does reproduce it is **copying our real `node_modules` into
+a bare folder** (minimal `deno.json`, no workspace). The server imports only `@hono/hono` + `@clerk/backend` in
+every row:
 
-| `iso-jsr-hono-clerk.ts` run against… | `node_modules` | per-reload |
+| `iso-jsr-hono-clerk.ts` run against… | `node_modules` | per-reload (12 reloads) |
 |---|---|---|
-| empty folder (only its 2 deps materialized) | small | +4–6, plateaus ~120 |
-| a 5-dep project (hono+clerk+drizzle+postgres+pino) | 33 MB | plateaus ~250 |
-| **our app's workspace `node_modules`** | **199 MB** | **+56, linear → OOM** |
+| empty folder / small synthetic install | ≤ few MB | +4–6, flat |
+| synthetic install, biggest tier | 124 MB | +7, flat |
+| `drizzle-orm` imported (full module graph) | 17 MB | +6, flat |
+| `@jsr/zod` added | 17 MB | +3, flat |
+| **our real `node_modules`, copied into a bare folder** | **197 MB** | **+48, linear → OOM** |
+| **our repo, in place** | **197 MB** | **+56, linear → OOM** |
 
-The server imports only `@hono/hono` + `@clerk/backend` in every row — the only thing that changes is how much
-sits in `node_modules` on disk (our 199 MB is mostly frontend deps it never imports). Notably the 5-dep row has
-a *bigger import graph* than the last row but a *smaller `node_modules`*, and it plateaus — so it tracks the
-on-disk tree, not what's imported. `--watch` appears to retain something proportional to the materialized
-`node_modules` per reload and never reclaim it, once an `npm:` island sits in a JSR-dominant graph.
+So the trigger is the **contents of a real dependency install**: the bare-folder copy rules out the workspace/
+config, the synthetic tiers rule out raw size, and drizzle / `@jsr/zod` on their own rule out a single heavy
+package. We have **not** isolated the exact package(s) — it appears to need the full real dependency set. What
+is certain: `--watch` retains something tied to the materialized `node_modules`, and `--node-modules-dir=none`
+turns it off.
 
 ## 2.9.0 evidence — two long `--watch` soaks
 
@@ -216,9 +225,10 @@ watchexec -r -e ts -- deno run --allow-net --allow-env --allow-sys=hostname --en
 1. **Why does `nodeModulesDir: "auto"` ramp when `--node-modules-dir=none` reclaims?** This is the cleanest
    lever we found: the *identical* `deno run --watch` + `jsr:@hono` + `npm:@clerk/backend` file **ramps
    linearly to OOM** with an on-disk `node_modules` and **plateaus ~120 MB** with `--node-modules-dir=none`.
-   Whatever `--watch` retains per reload seems tied to the on-disk `node_modules` materialization — and the
-   magnitude scales with the tree's total size, not the import graph (a 2-import server ramps against our
-   199 MB `node_modules`, most of which it never imports).
+   Whatever `--watch` retains per reload seems tied to the on-disk `node_modules` materialization. It's the
+   *contents* of a real install — copying our `node_modules` into a bare folder reproduces it — **not** the
+   size (a synthetic same-size `node_modules` doesn't ramp) and **not** any single heavy package (`drizzle-orm`
+   or `@jsr/zod` alone don't). We have not isolated the exact package(s).
 2. **Please reopen [#28107] (or track this as a new issue).** Its "resolved — it plateaus" close holds for
    the homogeneous-npm path on 2.9 (we confirm the plateau, ~295 MB), but is **directly contradicted** by a
    `deno run --watch` + `jsr:@hono` + `npm:@clerk/backend` case (run the normal way, `nodeModulesDir: "auto"`)
